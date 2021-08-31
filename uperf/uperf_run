@@ -1,5 +1,4 @@
 #!/bin/bash
-source ~/.bashrc
 arguments="$@"
 chars=`echo $0 | awk -v RS='/' 'END{print NR-1}'`
 run_dir=`echo $0 | cut -d'/' -f 1-${chars}`
@@ -40,6 +39,7 @@ server_ips=""
 client_ips=""
 results_prefix=""
 use_pbench_version=0
+port=22
 
 #
 # User specific code here.
@@ -54,6 +54,7 @@ usage()
 	echo "  --numb_jobs: comma separated list of the number of jobs per network to run"
 	echo "  --packet_sizes: comma separated list of packet sizes, (in bytes)"
 	echo "  --packet_type:  comma separated list of packet types, (tcp,udp)"
+	echo "  --port: port to perform ssh on, default is 22"
 	echo "  --server_ips: comma separated list of the server ip addresses"
 	echo "  --sleep_period: time to sleep for after we start uperf on the clients"
 	echo "  --suffix: Suffix to add to the results file"
@@ -468,6 +469,7 @@ ARGUMENT_LIST=(
     "numb_jobs"
     "packet_sizes"
     "packet_type"
+    "port"
     "server_ips"
     "sleep_period"
     "suffix"
@@ -520,6 +522,10 @@ while [[ $# -gt 0 ]]; do
 			packet_type=$2
 			shift 2
 		;;
+		--port)
+			port=$2
+			shift 2
+		;;
 		--server_ips)
 			server_ips=$2
 			shift 2
@@ -569,13 +575,13 @@ ${run_dir}/uperf_build $home_root $user
 #
 client_ip_list=`echo $client_ips | sed 's/,/ /g'`
 server_ip_list=`echo $server_ips | sed 's/,/ /g'`
-id > /tmp/test_id
+
 for client in $client_ip_list; do
-        ssh -f -oStrictHostKeyChecking=no root@$client "ls /dev > /dev/null"
-        scp  ${run_dir}/uperf_build root@$client:${to_home_root}/${to_user}/uperf_build
-        ssh -f -oStrictHostKeyChecking=no root@$client "chmod 755 ${to_home_root}/${to_user}/uperf_build"
-        ssh -f -oStrictHostKeyChecking=no root@$client "${to_home_root}/${to_user}/uperf_build ${to_home_root} ${to_user}"
-        ssh -f -oStrictHostKeyChecking=no root@$client "nohup /usr/local/bin/uperf -s &"
+        ssh -p 22 -f -oStrictHostKeyChecking=no root@$client "ls /dev > /dev/null"
+        scp -P 22 ${run_dir}/uperf_build root@$client:${to_home_root}/${to_user}/uperf_build
+        ssh -p 22 -f -oStrictHostKeyChecking=no root@$client "chmod 755 ${to_home_root}/${to_user}/uperf_build"
+        ssh -p 22 -f -oStrictHostKeyChecking=no root@$client "${to_home_root}/${to_user}/uperf_build ${to_home_root} ${to_user}"
+        ssh -p 22 -f -oStrictHostKeyChecking=no root@$client "nohup /usr/local/bin/uperf -s &"
 done
 sleep $sleep_period
 
