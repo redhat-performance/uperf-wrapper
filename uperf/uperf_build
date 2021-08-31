@@ -1,0 +1,28 @@
+#!/bin/bash
+
+install_uperf()
+{
+	cd /$1/$2/workloads/uperf_run
+	git clone https://github.com/uperf/uperf.git uperf
+	cd uperf
+	autoreconf -f -i
+	./configure
+	touch *
+	make install
+	cd
+}
+
+cat /proc/version | grep "Red Hat" > /dev/null
+if [ $? -eq 0 ]; then
+	yum install epel-release.noarch
+fi
+if [ -f "/bin/uperf" ]; then
+	if [ ! -f "/usr/local/bin/uperf" ]; then
+        	cp /bin/uperf /usr/local/bin/uperf
+        	chmod 755 /usr/local/bin/uperf
+	fi
+else
+        if [[ ! -f "/usr/local/bin/uperf" ]]; then
+                install_uperf $1 $2
+        fi
+fi
