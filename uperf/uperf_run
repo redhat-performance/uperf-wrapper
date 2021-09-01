@@ -5,9 +5,6 @@ run_dir=`echo $0 | cut -d'/' -f 1-${chars}`
 test_name="uperf"
 sleep_period=60
 
-source /home/ec2-user/.bashrc
-source .bashrc
-
 results_file_worker=""
 execution_time=60
 iterations=1
@@ -41,6 +38,10 @@ client_ips=""
 results_prefix=""
 use_pbench_version=0
 port=22
+#
+# Because ansible is being stupid.
+#
+sudo_done=0
 
 #
 # User specific code here.
@@ -479,6 +480,7 @@ ARGUMENT_LIST=(
 )
 
 NO_ARGUMENTS=(
+	"sudo_done"
 	"use_pbench_version"
 )
 
@@ -531,6 +533,9 @@ while [[ $# -gt 0 ]]; do
 			server_ips=$2
 			shift 2
 		;;
+		--sudo_done)
+			sudo_done=1
+		;;
 		--suffix)
 			results_suffix=$2
 			shift 2
@@ -562,6 +567,11 @@ while [[ $# -gt 0 ]]; do
         esac
 done
 shift $((OPTIND-1))
+
+if [ $sudo_done -eq 0 ]; then
+	sudo --shell  $0 $arguments --sudo_done
+	exit
+fi
 
 worker=`echo $server_ips | sed "s/,/ /g"`
 number_networks=`echo $worker | wc -w`
