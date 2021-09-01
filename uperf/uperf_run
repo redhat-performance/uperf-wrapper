@@ -5,6 +5,7 @@ run_dir=`echo $0 | cut -d'/' -f 1-${chars}`
 test_name="uperf"
 sleep_period=60
 
+source /home/ec2-user/.bashrc
 source .bashrc
 
 results_file_worker=""
