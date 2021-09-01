@@ -41,7 +41,7 @@ port=22
 #
 # Because ansible is being stupid.
 #
-sudo_done=0
+ssh_done=0
 
 #
 # User specific code here.
@@ -480,7 +480,7 @@ ARGUMENT_LIST=(
 )
 
 NO_ARGUMENTS=(
-	"sudo_done"
+	"ssh_done"
 	"use_pbench_version"
 )
 
@@ -533,8 +533,8 @@ while [[ $# -gt 0 ]]; do
 			server_ips=$2
 			shift 2
 		;;
-		--sudo_done)
-			sudo_done=1
+		--ssh_done)
+			ssh_done=1
 			shift 1
 		;;
 		--suffix)
@@ -569,10 +569,10 @@ while [[ $# -gt 0 ]]; do
 done
 shift $((OPTIND-1))
 
-if [ $sudo_done -eq 0 ]; then
-	sudo --shell  $0 $arguments --sudo_done
-	exit
-fi
+#if [ $ssh_done -eq 0 ]; then
+#	ssh -oStrictHostKeyChecking=no  root@localhost  $0 $arguments --ssh_done
+#	exit
+#fi
 
 worker=`echo $server_ips | sed "s/,/ /g"`
 number_networks=`echo $worker | wc -w`
@@ -589,10 +589,10 @@ client_ip_list=`echo $client_ips | sed 's/,/ /g'`
 server_ip_list=`echo $server_ips | sed 's/,/ /g'`
 
 for client in $client_ip_list; do
-        ssh -p 22 -f -oStrictHostKeyChecking=no root@$client "ls /dev > /dev/null"
+        ssh -p 22 -oStrictHostKeyChecking=no root@$client "ls /dev > /dev/null"
         scp -P 22 ${run_dir}/uperf_build root@$client:${to_home_root}/${to_user}/uperf_build
-        ssh -p 22 -f -oStrictHostKeyChecking=no root@$client "chmod 755 ${to_home_root}/${to_user}/uperf_build"
-        ssh -p 22 -f -oStrictHostKeyChecking=no root@$client "${to_home_root}/${to_user}/uperf_build ${to_home_root} ${to_user}"
+        ssh -p 22 -oStrictHostKeyChecking=no root@$client "chmod 755 ${to_home_root}/${to_user}/uperf_build"
+        ssh -p 22 -oStrictHostKeyChecking=no root@$client "${to_home_root}/${to_user}/uperf_build ${to_home_root} ${to_user}"
         ssh -p 22 -f -oStrictHostKeyChecking=no root@$client "nohup /usr/local/bin/uperf -s &"
 done
 sleep $sleep_period
