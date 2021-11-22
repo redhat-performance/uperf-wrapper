@@ -165,6 +165,9 @@ record_data()
 	rm dave*
 	for file in `ls`; do
 		results=`grep ^Total $file`
+		protocal=`echo $file | cut -d'_' -f3 | cut -d'=' -f 2`
+		op_type=`echo $file | cut -d'_' -f5 | cut -d'=' -f 2`
+		packet_size=`echo $file | cut -d'_' -f6 | cut -d'=' -f 2`
 		threads=`echo $file | cut -d'_' -f 4 | cut -d'=' -f 2`
 		time=`echo $results | cut -d' ' -f 4`
 		rate=`echo $results | cut -d' ' -f 6`
@@ -181,7 +184,7 @@ record_data()
 		fi
 		op1=`echo $ops | sed "s/op\/s//g"`
 		latency=`echo "scale=6;1/${op1}" | bc`
-		echo "${threads}:${time}:$rate:$ops:$latency" >> dave.tmp
+		echo "${threads}:${time}:$rate:$ops:$latency:${protocal}:${op_type}:${packet_size}" >> dave.tmp
 	done
 	cat dave.tmp | sort -n > dave.sorted
 	#
@@ -204,11 +207,12 @@ record_data()
 	do
 		threads=`echo $line | cut -d: -f 1`
 		bw=`echo $line | cut -d: -f 3 | sed "s/Gb\/s//g"`
+		rest=`echo $line | cut -d: -f 6-8`
 		iops=`echo $line | cut -d: -f 4 | sed "s/op\/s//g"`
 		lat=`echo $line | cut -d: -f 5`
-		echo $threads:$bw >> throughput.csv
-		echo $threads:$iops >> iops.csv
-		echo $threads:$lat >> latency.csv
+		echo $threads:$bw:$rest >> throughput.csv
+		echo $threads:$iops:$rest >> iops.csv
+		echo $threads:$lat:$rest >> latency.csv
 	done < "dave.sorted"
 	echo "" >> throughput.csv
 	echo "" >> iops.csv
