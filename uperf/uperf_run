@@ -94,6 +94,7 @@ usage()
 # to_configuration: configuration information
 # to_times_to_run: number of times to run the test
 # to_pbench: Run the test via pbench
+# to_pbench_copy: Copy the data to the pbench repository, not move_it.
 # to_puser: User running pbench
 # to_run_label: Label for the run
 # to_user: User on the test system running the test
@@ -132,11 +133,11 @@ if [ ! -d "test_tools" ]; then
 	#
 	# Clone the tools if required.
 	#
-        git clone $tools_git
-        if [ $? -ne 0 ]; then
-                echo pulling git $tools_git failed.
-                exit
-        fi
+	git clone $tools_git
+	if [ $? -ne 0 ]; then
+		echo pulling git $tools_git failed.
+		exit
+	fi
 fi
 
 source test_tools/general_setup "$@"
@@ -479,8 +480,8 @@ save_pbench_results()
 	value=`$TOOLS_BIN/set_pbench_variables --host_config $to_configuration --sys_type $to_sys_type --test ${test_name} --pbench_user $to_puser --run_label $to_run_label`
 	results_prefix=`echo $value | cut -d: -f 2`
 	hostname=`echo $value | cut -d: -f 1`
-	echo $TOOLS_BIN/pbench_copy_data --hostname "${hostname}" --user "${to_puser}" --prefix ${results_prefix} >> /tmp/debugging
-	$TOOLS_BIN/pbench_copy_data --hostname "${hostname}" --user "${to_puser}" --prefix ${results_prefix}
+	echo $TOOLS_BIN/pbench_copy_data --hostname "${hostname}" --user "${to_puser}" --prefix ${results_prefix} --copy $to_pbench_copy >> /tmp/debugging
+	$TOOLS_BIN/pbench_copy_data --hostname "${hostname}" --user "${to_puser}" --prefix ${results_prefix} --copy $to_pbench_copy
 }
 
 
@@ -574,7 +575,7 @@ while [[ $# -gt 0 ]]; do
 			echo $1 is bad option
 			usage $0
 		;;
-        esac
+	esac
 done
 shift $((OPTIND-1))
 
@@ -592,11 +593,11 @@ ${run_dir}/uperf_build $home_root $user
 client_ip_list=`echo $client_ips | sed 's/,/ /g'`
 server_ip_list=`echo $server_ips | sed 's/,/ /g'`
 for client in $client_ip_list; do
-        ssh -oStrictHostKeyChecking=no root@$client "ls /dev > /dev/null"
-        scp  ${run_dir}/uperf_build root@$client:${to_home_root}/${to_user}/uperf_build
-        ssh -oStrictHostKeyChecking=no root@$client "chmod 755 ${to_home_root}/${to_user}/uperf_build"
-        ssh -oStrictHostKeyChecking=no root@$client "${to_home_root}/${to_user}/uperf_build ${to_home_root} ${to_user}"
-        ssh -f -oStrictHostKeyChecking=no root@$client "nohup /usr/local/bin/uperf -s &"
+	ssh -oStrictHostKeyChecking=no root@$client "ls /dev > /dev/null"
+	scp  ${run_dir}/uperf_build root@$client:${to_home_root}/${to_user}/uperf_build
+	ssh -oStrictHostKeyChecking=no root@$client "chmod 755 ${to_home_root}/${to_user}/uperf_build"
+	ssh -oStrictHostKeyChecking=no root@$client "${to_home_root}/${to_user}/uperf_build ${to_home_root} ${to_user}"
+	ssh -f -oStrictHostKeyChecking=no root@$client "nohup /usr/local/bin/uperf -s &"
 done
 sleep 30
 
