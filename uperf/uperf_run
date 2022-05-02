@@ -60,6 +60,7 @@ server_ips=""
 client_ips=""
 results_prefix=""
 use_pbench_version=0
+time_delay=0
 
 #
 # User specific code here.
@@ -78,10 +79,25 @@ usage()
 	echo "  --suffix: Suffix to add to the results file"
 	echo "  --test_types:  stream,rr,maerts,bidirec"
 	echo "  --time:  number of seconds to run the test for"
+	echo "  --time_delay <x>: Delay x seconds before the next iteration is started."
 	echo "  --tools_git: Pointer to the test_tools git.  Default is ${tools_git}.  Top directory is always test_tools"
 	echo " --use_pbench_version: Instead of running the wrappers version"
 	echo "     of linpack, use pbench-linpack when pbench is requested"
 	source test_tools/general_setup --usage
+}
+
+uperf_start_remote()
+{
+	client_ip_list=`echo $client_ips | sed 's/,/ /g'`
+	server_ip_list=`echo $server_ips | sed 's/,/ /g'`
+	for client in $client_ip_list; do
+		ssh -oStrictHostKeyChecking=no root@$client "ls /dev > /dev/null"
+		scp  ${run_dir}/uperf_build root@$client:${to_home_root}/${to_user}/uperf_build
+		ssh -oStrictHostKeyChecking=no root@$client "chmod 755 ${to_home_root}/${to_user}/uperf_build"
+		ssh -oStrictHostKeyChecking=no root@$client "${to_home_root}/${to_user}/uperf_build ${to_home_root} ${to_user}"
+		ssh -f -oStrictHostKeyChecking=no root@$client "nohup /usr/local/bin/uperf -s &"
+	done
+	sleep 30
 }
 
 #
@@ -94,7 +110,6 @@ usage()
 # to_configuration: configuration information
 # to_times_to_run: number of times to run the test
 # to_pbench: Run the test via pbench
-# to_pbench_copy: Copy the data to the pbench repository, not move_it.
 # to_puser: User running pbench
 # to_run_label: Label for the run
 # to_user: User on the test system running the test
@@ -108,7 +123,6 @@ tools_git=https://github.com/dvalinrh/test_tools
 # Clone the repo that contains the common code and tools
 #
 
-show_usage=0
 found=0
 for arg in "$@"; do
 	if [ $found -eq 1 ]; then
@@ -122,7 +136,11 @@ for arg in "$@"; do
 		found=1
 	fi
 	if [[ $arg == "--usage" ]]; then
-		show_usage=1
+		#
+		# Usage request present.  Note do not exit out, we will do that
+		# in test_tools/general_setup
+		# 
+		usage $0
 	fi
 done
 
@@ -135,10 +153,6 @@ if [ ! -d "test_tools" ]; then
 		echo pulling git $tools_git failed.
 		exit
 	fi
-fi
-
-if [ $show_usage -eq 1 ]; then
-	usage $0
 fi
 
 source test_tools/general_setup "$@"
@@ -167,6 +181,7 @@ record_data()
 	rm dave*
 	for file in `ls`; do
 		results=`grep ^Total $file`
+		echo $file
 		protocal=`echo $file | cut -d'_' -f3 | cut -d'=' -f 2`
 		op_type=`echo $file | cut -d'_' -f5 | cut -d'=' -f 2`
 		packet_size=`echo $file | cut -d'_' -f6 | cut -d'=' -f 2`
@@ -176,6 +191,8 @@ record_data()
 		ops=`echo $results | cut -d' ' -f 7`
 		if [[ $rate == *"Mb"* ]]; then
 			rate1=`echo $rate | sed "s/Mb\/s//g"`
+			# djv
+			echo rate $rate1
 			rate=`echo "scale=2;$rate1/1024" | bc`
 			rate="${rate}Gb/s"
 		fi
@@ -244,7 +261,7 @@ organize_data()
 			for ps in $packet_size; do
 				for nn in $numb_nets; do
 					mkdir -p net_results/${tt}/${pt}/${ps}/${nn}
-					cp summary_results_${tt}*pt=${pt}_ps=${ps}_nets=${nn}_ net_results/${tt}/${pt}/${ps}/${nn}
+					cp summary_results_${tt}*pt=${pt}_ps=${ps}_nets=${nn}_iteration* net_results/${tt}/${pt}/${ps}/${nn}
 				done
 			done
 		done
@@ -284,6 +301,7 @@ build_xml()
 	local_numb_networks=$6
 	local_iteration=$7
 	local_test_type=$8
+	local_test_iteration=$9
 
 	echo "<?xml version=\"1.0\"?>"  > xml${local_instance}
 	echo "<profile name=\"${local_test_type}-${local_pk_size}B-${local_nthr}i\">" >> xml${local_instance}
@@ -326,7 +344,7 @@ build_xml()
 	echo "  </group>" >> xml${local_instance}
 	echo "</profile>" >> xml${local_instance}
 
-	results_file="results_${local_test_type}_nj=${local_nthr}_pt=${local_protocal}_ps=${local_pk_size}_nets=${local_numb_networks}"
+	results_file="results_${local_test_type}_nj=${local_nthr}_pt=${local_protocal}_ps=${local_pk_size}_nets=${local_numb_networks}_iteration=${local_test_iteration}"
 	if [ ${local_instance} -eq 1 ]; then
 		results_file_worker="${results_file}_itera=${local_iteration}.${local_instance}_${results_suffix}"
 	else
@@ -348,9 +366,10 @@ install_uperf()
 
 execute_test()
 {
+	test_iteration=$1
 	net_count=1
 	for nets in $networks;do
-		build_xml "${njobs}" "${packet_type}" "${packet_size}" "${nets}" "${net_count}" "${network_count}" "${test_iteration}" "${test_case}"
+		build_xml "${njobs}" "${packet_type}" "${packet_size}" "${nets}" "${net_count}" "${network_count}" "1" "${test_case}" "${test_iteration}"
 		echo "/usr/local/bin/uperf -m xml${net_count} >& $results_file_worker"
 		/usr/local/bin/uperf -m xml${net_count} >& $results_file_worker &
 		pids[${net_count}]=$!
@@ -364,6 +383,7 @@ execute_test()
 # Collapse results files now
 #
 	cat "${results_file}"*  >> ${uperf_results}/summary_${results_file}_${results_suffix}
+	cp ${results_file} ${uperf_results}
 	rm -f "${results_file}"*
 	rm -f debug*
 	rm -f xml*
@@ -377,7 +397,19 @@ test_iteration_loop()
 {
 	for test_iteration  in 1 `seq 2 1 $to_times_to_run`;
 	do
-		execute_test
+		echo here we are.
+		execute_test $test_iteration
+		for client_ip in $client_ip_list; do
+			ssh $client_ip "pkill -9 uperf"
+		done
+		#
+		# Restart uperf on the remote systems.
+		#
+		uperf_start_remote 
+		if [ $time_delay -ne 0 ]; then
+			echo sleeping for $time_delay
+			sleep $time_delay
+		fi
 	done
 }
 
@@ -481,22 +513,23 @@ save_pbench_results()
 	value=`$TOOLS_BIN/set_pbench_variables --host_config $to_configuration --sys_type $to_sys_type --test ${test_name} --pbench_user $to_puser --run_label $to_run_label`
 	results_prefix=`echo $value | cut -d: -f 2`
 	hostname=`echo $value | cut -d: -f 1`
-	echo $TOOLS_BIN/pbench_copy_data --hostname "${hostname}" --user "${to_puser}" --prefix ${results_prefix} --copy $to_pbench_copy >> /tmp/debugging
-	$TOOLS_BIN/pbench_copy_data --hostname "${hostname}" --user "${to_puser}" --prefix ${results_prefix} --copy $to_pbench_copy
+	echo $TOOLS_BIN/pbench_copy_data --hostname "${hostname}" --user "${to_puser}" --prefix ${results_prefix} >> /tmp/debugging
+	$TOOLS_BIN/pbench_copy_data --hostname "${hostname}" --user "${to_puser}" --prefix ${results_prefix}
 }
 
 
 ARGUMENT_LIST=(
-    "client_ips"
-    "max_stddev"
-    "networks_to_run"
-    "numb_jobs"
-    "packet_sizes"
-    "packet_type"
-    "server_ips"
-    "suffix"
-    "tests"
-    "time"
+	"client_ips"
+	"max_stddev"
+	"networks_to_run"
+	"numb_jobs"
+	"packet_sizes"
+	"packet_type"
+	"server_ips"
+	"suffix"
+	"tests"
+	"time"
+	"time_delay"
 )
 
 NO_ARGUMENTS=(
@@ -561,6 +594,10 @@ while [[ $# -gt 0 ]]; do
 			execution_time=$2
 			shift 2
 		;;
+		--time_delay)
+			time_delay=$2
+			shift 2
+		;;
 		--tools_git)
 			tools_git=$2
 			shift 2
@@ -591,16 +628,8 @@ ${run_dir}/uperf_build $home_root $user
 #
 # Start uperf on the remote systems.
 #
-client_ip_list=`echo $client_ips | sed 's/,/ /g'`
-server_ip_list=`echo $server_ips | sed 's/,/ /g'`
-for client in $client_ip_list; do
-	ssh -oStrictHostKeyChecking=no root@$client "ls /dev > /dev/null"
-	scp  ${run_dir}/uperf_build root@$client:${to_home_root}/${to_user}/uperf_build
-	ssh -oStrictHostKeyChecking=no root@$client "chmod 755 ${to_home_root}/${to_user}/uperf_build"
-	ssh -oStrictHostKeyChecking=no root@$client "${to_home_root}/${to_user}/uperf_build ${to_home_root} ${to_user}"
-	ssh -f -oStrictHostKeyChecking=no root@$client "nohup /usr/local/bin/uperf -s &"
-done
-sleep 30
+uperf_start_remote 
+
 
 uperf_results=uperf_results_${results_suffix}_$(date "+%Y.%m.%d-%H.%M.%S")
 mkdir ${uperf_results}
