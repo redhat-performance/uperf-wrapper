@@ -381,10 +381,12 @@ execute_test()
 {
 	test_iteration=$1
 	net_count=1
+	timestamp=`date +%u%t%T`
+	echo "# Time period: $timestamp" > $results_file_worker
 	for nets in $networks;do
 		build_xml "${njobs}" "${packet_type}" "${packet_size}" "${nets}" "${net_count}" "${network_count}" "1" "${test_case}" "${test_iteration}"
-		echo "/usr/local/bin/uperf -m xml${net_count} >& $results_file_worker"
-		/usr/local/bin/uperf -m xml${net_count} >& $results_file_worker &
+		echo "/usr/local/bin/uperf -m xml${net_count} >>& $results_file_worker"
+		/usr/local/bin/uperf -m xml${net_count} >>& $results_file_worker &
 		pids[${net_count}]=$!
 		let "net_count=$net_count+1"
 	done
