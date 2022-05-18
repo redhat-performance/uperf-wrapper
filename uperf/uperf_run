@@ -379,13 +379,22 @@ install_uperf()
 
 execute_test()
 {
+	net_file=""
 	test_iteration=$1
 	net_count=1
+	network_list=`ifconfig -a | grep flags | cut -d: -f1`
 	timestamp=`date +%u%t%T`
-	echo "# Time period: $timestamp" > $results_file_worker
+
 	for nets in $networks;do
 		build_xml "${njobs}" "${packet_type}" "${packet_size}" "${nets}" "${net_count}" "${network_count}" "1" "${test_case}" "${test_iteration}"
+		echo "# Time period: $timestamp" > $results_file_worker
 		echo "/usr/local/bin/uperf -m xml${net_count} >> $results_file_worker"
+		if [ $net_count -eq 1 ]; then
+			net_file=${uperf_results}/${results_file_worker}_stats
+			for nets in ${network_list}; do
+				ethtool -S ${nets} > ${uperf_results}/net_stats_${nets}.before
+			done
+		fi
 		/usr/local/bin/uperf -m xml${net_count} >> $results_file_worker &
 		pids[${net_count}]=$!
 		let "net_count=$net_count+1"
@@ -393,6 +402,9 @@ execute_test()
 	# Adjust it down.
 	for pid in ${pids[*]}; do
 		wait $pid
+	done
+	for nets in ${network_list}; do
+		ethtool -S ${nets} > ${uperf_results}/net_stats_${nets}.after
 	done
 #
 # Collapse results files now
@@ -412,7 +424,6 @@ test_iteration_loop()
 {
 	for test_iteration  in 1 `seq 2 1 $to_times_to_run`;
 	do
-		echo here we are.
 		execute_test $test_iteration
 		for client_ip in $client_ip_list; do
 			ssh $client_ip "pkill -9 uperf"
