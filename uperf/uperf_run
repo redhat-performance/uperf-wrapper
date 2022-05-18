@@ -392,7 +392,7 @@ execute_test()
 		if [ $net_count -eq 1 ]; then
 			net_file=${uperf_results}/${results_file_worker}_stats
 			for nets in ${network_list}; do
-				ethtool -S ${nets} > ${uperf_results}/net_stats_${nets}.before
+				ethtool -S ${nets} > ${uperf_results}/net_stats_${nets}_iter_${test_iteration}.before
 			done
 		fi
 		/usr/local/bin/uperf -m xml${net_count} >> $results_file_worker &
@@ -404,7 +404,7 @@ execute_test()
 		wait $pid
 	done
 	for nets in ${network_list}; do
-		ethtool -S ${nets} > ${uperf_results}/net_stats_${nets}.after
+		ethtool -S ${nets} > ${uperf_results}/net_stats_${nets}_iter_${test_iteration}.after
 	done
 #
 # Collapse results files now
