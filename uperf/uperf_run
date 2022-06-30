@@ -105,7 +105,7 @@ uperf_start_remote()
 	server_ip_list=`echo $server_ips | sed 's/,/ /g'`
 	for client in $client_ip_list; do
 		ssh -oStrictHostKeyChecking=no root@$client "ls /dev > /dev/null"
-		scp  ${run_dir}/uperf_build root@$client:${to_home_root}/${to_user}/uperf_build
+		scp -oStrictHostKeyChecking=no ${run_dir}/uperf_build root@$client:${to_home_root}/${to_user}/uperf_build
 		ssh -oStrictHostKeyChecking=no root@$client "chmod 755 ${to_home_root}/${to_user}/uperf_build"
 		ssh -oStrictHostKeyChecking=no root@$client "${to_home_root}/${to_user}/uperf_build ${to_home_root} ${to_user}"
 		ssh -f -oStrictHostKeyChecking=no root@$client "nohup /usr/local/bin/uperf -s &"
@@ -426,7 +426,7 @@ test_iteration_loop()
 	do
 		execute_test $test_iteration
 		for client_ip in $client_ip_list; do
-			ssh $client_ip "pkill -9 uperf"
+			ssh -oStrictHostKeyChecking=no $client_ip "pkill -9 uperf"
 		done
 		#
 		# Restart uperf on the remote systems.
