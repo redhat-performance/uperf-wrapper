@@ -23,6 +23,13 @@
 #
 arguments="$@"
 
+if [ ! -f "uperf.out" ]; then
+        command="${0} $@}"
+        echo $command
+        script -c "$command}" uperf.out
+        exit $?
+fi
+
 curdir=`pwd`
 if [[ $0 == "./"* ]]; then
 	chars=`echo $0 | awk -v RS='/' 'END{print NR-1}'`
@@ -410,6 +417,20 @@ execute_test()
 # Collapse results files now
 #
 	cat "${results_file}"*  >> ${uperf_results}/summary_${results_file}_${results_suffix}
+	#
+	# Report failures
+	#
+	if [ -f ${uperf_results}/summary_${results_file}_${results_suffix} ]; then
+		lines=`wc -l ${uperf_results}/summary_${results_file}_${results_suffix} | cut -d' ' -f1`
+	else
+		lines=1
+	fi
+	echo $lines >> /tmp/debugging
+	if [ $lines -eq 1 ]; then
+		echo Failed >> ${uperf_results}/test_results_report
+	else
+		echo Ran >> ${uperf_results}/test_results_report
+	fi
 	cp ${results_file} ${uperf_results}
 	rm -f "${results_file}"*
 	rm -f debug*
