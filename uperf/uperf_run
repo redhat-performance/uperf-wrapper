@@ -704,6 +704,7 @@ if [ $to_pbench -eq 0 ]; then
 	organize_data
 	popd
 	cp ${curdir}/meta_data.yml $uperf_results
+	cp ${curdir}/uperf.out $uperf_results
 	tar hcf /tmp/results_uperf_${to_tuned_setting}.tar $uperf_results
 else
 	value=`$TOOLS_BIN/set_pbench_variables --host_config $to_configuration --sys_type $to_sys_type --test uperf --pbench_user $to_puser --run_label $to_run_label`
