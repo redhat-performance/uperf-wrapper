@@ -115,6 +115,7 @@ uperf_start_remote()
 		scp -oStrictHostKeyChecking=no ${run_dir}/uperf_build root@$client:${to_home_root}/${to_user}/uperf_build
 		ssh -oStrictHostKeyChecking=no root@$client "chmod 755 ${to_home_root}/${to_user}/uperf_build"
 		ssh -oStrictHostKeyChecking=no root@$client "${to_home_root}/${to_user}/uperf_build ${to_home_root} ${to_user}"
+		ssh -oStrictHostKeyChecking=no root@$client "systemctl stop firewalld"
 		ssh -f -oStrictHostKeyChecking=no root@$client "nohup /usr/local/bin/uperf -s &"
 	done
 	sleep 30
@@ -443,6 +444,7 @@ execute_test()
 #
 test_iteration_loop()
 {
+	systemctl stop firewalld
 	for test_iteration  in 1 `seq 2 1 $to_times_to_run`;
 	do
 		execute_test $test_iteration
