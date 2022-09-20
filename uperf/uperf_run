@@ -601,54 +601,55 @@ fi
 eval set --$opts
 
 while [[ $# -gt 0 ]]; do
+	value=`echo $2 | sed "s/}//g"`
 	case "${1}" in
 		--client_ips)
-			client_ips=$2
+			client_ips=$value
 			shift 2
 		;;
 		--max_stddev)
-			max_stddev="--max-stddev=${2}"
+			max_stddev="--max-stddev=${value}"
 			shift 2
 		;;
 		--numb_jobs)
-			numb_jobs=$2
+			numb_jobs=$value
 			shift 2
 		;;
 		--packet_sizes)
-			packet_size=$2
+			packet_size=$value
 			shift 2
 		;;
 		--networks_to_run)
-			networks_to_run=$2
+			networks_to_run=$value
 			shift 2
 		;;
 		--packet_type)
-			packet_type=$2
+			packet_type=$value
 			shift 2
 		;;
 		--server_ips)
-			server_ips=$2
+			server_ips=$value
 			shift 2
 		;;
 		--suffix)
-			results_suffix=$2
+			results_suffix=$value
 			shift 2
 		;;
 		--tests)
-			temp=$2
+			temp=$value
 			tests=`echo "$temp"|tr '\n' ' '`
 			shift 2
 		;;
 		--time)
-			execution_time=$2
+			execution_time=$value
 			shift 2
 		;;
 		--time_delay)
-			time_delay=$2
+			time_delay=$value
 			shift 2
 		;;
 		--tools_git)
-			tools_git=$2
+			tools_git=$value
 			shift 2
 		;;
 		--use_pbench_version)
