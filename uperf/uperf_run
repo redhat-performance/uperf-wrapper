@@ -176,6 +176,7 @@ if [ ! -d "test_tools" ]; then
 	fi
 fi
 
+${curdir}/test_tools/gather_data ${curdir}
 source test_tools/general_setup "$@"
 
 #
@@ -706,7 +707,7 @@ if [ $to_pbench -eq 0 ]; then
 	pushd $uperf_results
 	organize_data
 	popd
-	cp ${curdir}/meta_data.yml $uperf_results
+	${curdir}/test_tools/move_data $curdir $uperf_results
 	cp ${curdir}/uperf.out $uperf_results
 	tar hcf /tmp/results_uperf_${to_tuned_setting}.tar $uperf_results
 else
