@@ -24,7 +24,7 @@
 arguments="$@"
 
 if [ ! -f "uperf.out" ]; then
-        command="${0} $@}"
+        command="${0} ${@}"
         echo $command
         script -c "${command}" uperf.out
         exit $?
