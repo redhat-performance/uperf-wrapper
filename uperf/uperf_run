@@ -57,7 +57,7 @@ packet_type="udp,tcp"
 tests="stream,rr,bidirec,maerts"
 uperf_results=""
 results_file=""
-results_suffix=""
+results_suffix="1"
 networks_to_run="1,2,3,4,6,8,12,16,20,24,28,32"
 client_ip_list=""
 server_ip_list=""
@@ -231,7 +231,7 @@ execute_test()
 #
 # Collapse results files now
 #
-	cat "${results_file}"*  >> ${uperf_results}/summary_${results_file_worker}
+	cat "${results_file_worker}"*  >> ${uperf_results}/summary_${results_file_worker}
 	#
 	# Report failures
 	#
@@ -683,7 +683,7 @@ number_networks=`echo $worker | wc -w`
 echo "****************************************************************************************"
 echo ${home_root}
 echo ${user}
-
+Soupass@Q42022
 ${run_dir}/uperf_build $home_root $user
 
 #
