@@ -120,7 +120,265 @@ uperf_start_remote()
 	done
 	sleep 30
 }
+build_xml()
+{
+	local_nthr=$1
+	local_protocal=$2
+	local_pk_size=$3
+	local_test_host=$4
+	local_instance=$5
+	local_numb_networks=$6
+	local_iteration=$7
+	local_test_type=$8
+	local_test_iteration=$9
 
+	echo "<?xml version=\"1.0\"?>"  > xml${local_instance}
+	echo "<profile name=\"${local_test_type}-${local_pk_size}B-${local_nthr}i\">" >> xml${local_instance}
+	echo "  <group nthreads=\"${1}\">" >> xml${local_instance}
+	case $local_test_type in
+		rr)
+			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
+			echo "      <flowop type=\"connect\" options=\"remotehost=${local_test_host} protocol=${local_protocal}\"/>" >> xml${local_instance}
+			echo "    </transaction>" >> xml${local_instance}
+			echo "    <transaction duration=\"${execution_time}s\">" >> xml${local_instance}
+			echo "      <flowop type=\"write\" options=\"count=${local_nthr} size=${local_pk_size}\"/>" >> xml${local_instance}
+			echo "      <flowop type=\"read\"  options=\"size=${local_pk_size}\"/>" >> xml${local_instance}
+			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
+			echo "      <flowop type=\"disconnect\" />" >> xml${local_instance}
+			echo "    </transaction>" >> xml${local_instance}
+		;;
+		stream|bidirec)
+			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
+			echo "      <flowop type=\"connect\" options=\"remotehost=${local_test_host} protocol=${local_protocal}\"/>" >> xml${local_instance}
+			echo "    </transaction>" >> xml${local_instance}
+			echo "    <transaction duration=\"${execution_time}s\">" >> xml${local_instance}
+			echo "      <flowop type=\"write\" options=\"count=${local_nthr} size=${local_pk_size}\"/>" >> xml${local_instance}
+			echo "    </transaction>" >> xml${local_instance}
+			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
+			echo "      <flowop type=\"disconnect\" />" >> xml${local_instance}
+			echo "    </transaction>" >> xml${local_instance}
+			;;
+		maerts|bidirec)
+			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
+			echo "      <flowop type=\"accept\" options=\"remotehost=${local_test_host} protocol=${local_protocal}\"/>" >> xml${local_instance}
+			echo "    </transaction>" >> xml${local_instance}
+			echo "    <transaction duration=\"${execution_time}s\">" >> xml${local_instance}
+			echo "      <flowop type=\"read\" options=\"${local_nthr} size=${local_pk_size}\"/>" >> xml${local_instance}
+			echo "    </transaction>" >> xml${local_instance}
+			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
+			echo "      <flowop type=\"disconnect\" />" >> xml${local_instance}
+			echo "    </transaction>" >> xml${local_instance}
+			;;
+	esac
+	echo "  </group>" >> xml${local_instance}
+	echo "</profile>" >> xml${local_instance}
+
+	results_file="results_${local_test_type}_nj=${local_nthr}_pt=${local_protocal}_ps=${local_pk_size}_nets=${local_numb_networks}_iteration=${local_test_iteration}"
+	echo $local_instance
+	echo "*****************************************************************************************"
+	echo ${local_instance}
+	echo ${results_suffix}
+
+	if [ ${local_instance} -eq 1 ]; then
+		results_file_worker="${results_file}_itera=${local_iteration}.${local_instance}_${results_suffix}"
+	else
+		results_file_worker="debug_${results_file}_itera=${local_iteration}.${local_instance}_${results_suffix}"
+	fi
+	echo ${results_file_worker}
+}
+
+install_uperf()
+{
+	cd /$to_home_root/$to_user/workloads
+	git clone https://github.com/uperf/uperf.git uperf
+	cd uperf
+	autoreconf -f -i
+	./configure
+	touch *
+	make install
+	cd
+}
+
+execute_test()
+{
+	net_file=""
+	test_iteration=$1
+	net_count=1
+	network_list=`ifconfig -a | grep flags | cut -d: -f1`
+	timestamp=`date +%u%t%T`
+
+	for nets in $networks;do
+		build_xml "${njobs}" "${packet_type}" "${packet_size}" "${nets}" "${net_count}" "${network_count}" "1" "${test_case}" "${test_iteration}"
+		echo "# Time period: $timestamp" > $results_file_worker
+		echo "/usr/local/bin/uperf -m xml${net_count} >> $results_file_worker"
+		if [ $net_count -eq 1 ]; then
+			net_file=${uperf_results}/${results_file_worker}_stats
+			for nets in ${network_list}; do
+				ethtool -S ${nets} > ${uperf_results}/net_stats_${nets}_iter_${test_iteration}.before
+			done
+		fi
+		/usr/local/bin/uperf -m xml${net_count} >> $results_file_worker &
+		pids[${net_count}]=$!
+		let "net_count=$net_count+1"
+	done
+	# Adjust it down.
+	for pid in ${pids[*]}; do
+		wait $pid
+	done
+	for nets in ${network_list}; do
+		ethtool -S ${nets} > ${uperf_results}/net_stats_${nets}_iter_${test_iteration}.after
+	done
+#
+# Collapse results files now
+#
+	cat "${results_file}"*  >> ${uperf_results}/summary_${results_file_worker}
+	#
+	# Report failures
+	#
+	if [ -f ${uperf_results}/summary_${results_file_worker}_${results_suffix} ]; then
+		lines=`wc -l ${uperf_results}/summary_${results_file_worker}_${results_suffix} | cut -d' ' -f1`
+	else
+		lines=1
+	fi
+	echo $lines >> /tmp/debugging
+	if [ $lines -eq 1 ]; then
+		echo Failed >> ${uperf_results}/test_results_report
+	else
+		echo Ran >> ${uperf_results}/test_results_report
+	fi
+	cp ${results_file_worker} ${uperf_results}
+	rm -f "${results_file_worker}"*
+	rm -f debug*
+	rm -f xml*
+}
+
+#
+# Break the loops for the test into their own functions.  Doing so keeps the indentation
+# under control.
+#
+test_iteration_loop()
+{
+	systemctl stop firewalld
+	for test_iteration  in 1 `seq 2 1 $to_times_to_run`;
+	do
+		execute_test $test_iteration
+		for client_ip in $client_ip_list; do
+			ssh -oStrictHostKeyChecking=no $client_ip "pkill -9 uperf"
+		done
+		#
+		# Restart uperf on the remote systems.
+		#
+		uperf_start_remote
+		if [ $time_delay -ne 0 ]; then
+			echo sleeping for $time_delay
+			sleep $time_delay
+		fi
+	done
+}
+
+packet_size_loop()
+{
+	for packet_size in $packet_size_do;do
+		test_iteration_loop
+	done
+}
+
+packet_type_loop()
+{
+	for packet_type in $packets_do;do
+		packet_size_loop
+	done
+}
+
+njobs_loop()
+{
+	for  njobs in $numb_jobs_do; do
+		packet_type_loop
+	done
+}
+
+client_ip_loop()
+{
+	for client_ip in $client_ip_list; do
+		if [[ -z $networks ]]; then
+			networks=$client_ip
+			network_count=1
+		else
+			networks+=" "$client_ip
+			let "network_count=$network_count+1"
+		fi
+		if [ $network_count -lt $networks_using ]; then
+			continue
+		fi
+		if [ $network_count -gt $networks_using ]; then
+			network_done=1;
+		fi
+		if [ $network_count -gt $number_networks ]; then
+			network_done=1;
+		fi
+		if [ $network_done -eq 1 ]; then
+			break
+		fi
+		njobs_loop
+	done
+}
+
+network_list_loop()
+{
+	for networks_using in $network_list; do
+		if [ $network_done -eq 1 ]; then
+			break
+		fi
+		client_ip_loop
+	done
+}
+
+#
+# pbench operations
+#
+# Run pbench uperf with the appropriate options
+#
+run_pbench_uperf_test()
+{
+	if [ $use_pbench_version -eq 1 ]; then
+		#
+		# Get the number of ips.
+		#
+		server_ips_use=`echo $server_ips | cut -d',' -f1-$networks_to_run`
+		client_ips_use=`echo $client_ips | cut -d',' -f1-$networks_to_run`
+		echo pbench-uperf  -r $execution_time -m $packet_size -p tcp -i $numb_jobs -S $server_ips_use -C $client_ips_use --config=${to_tuned_setting} ${max_stddev} -t ${tests} >> /tmp/net_log
+		#
+		# Start the pbench uperf test.
+		#
+		pbench-uperf  -r $execution_time -m $packet_size -p $packet_type -i $numb_jobs -S $server_ips_use -C $client_ips_use --config=${to_tuned_setting} ${max_stddev} -t ${tests}
+	else
+		echo calling execute_via_pbench >> /tmp/debugging
+		$TOOLS_BIN/execute_via_pbench --cmd_executing "$0" $arguments --test $test_name --spacing 11 --pbench_stats $to_pstats
+		echo returned from execute_via_pbench >> /tmp/debugging
+	fi
+}
+
+#
+# Save the uperf results, both via pbench repo and tar file.
+#
+save_pbench_results()
+{
+	cd /var/lib/pbench-agent/
+	mkdir export_uperf_data
+	for i in `ls -d uperf_*`
+	do
+		mkdir export_uperf_data/$i
+		cp $i/result.csv export_uperf_data/$i
+		cp $i/result.txt export_uperf_data/$i
+	done
+	tar hcf /tmp/results_pbench_uperf_${to_tuned_setting}.tar export_uperf_data
+
+	value=`$TOOLS_BIN/set_pbench_variables --host_config $to_configuration --sys_type $to_sys_type --test ${test_name} --pbench_user $to_puser --run_label $to_run_label`
+	results_prefix=`echo $value | cut -d: -f 2`
+	hostname=`echo $value | cut -d: -f 1`
+	echo $TOOLS_BIN/pbench_copy_data --hostname "${hostname}" --user "${to_puser}" --prefix ${results_prefix} >> /tmp/debugging
+	$TOOLS_BIN/pbench_copy_data --hostname "${hostname}" --user "${to_puser}" --prefix ${results_prefix}
+}
 #
 # Standard location to pull the test_tools from.
 #
@@ -313,259 +571,7 @@ organize_data()
 	popd > /dev/null
 }
 
-build_xml()
-{
-	local_nthr=$1
-	local_protocal=$2
-	local_pk_size=$3
-	local_test_host=$4
-	local_instance=$5
-	local_numb_networks=$6
-	local_iteration=$7
-	local_test_type=$8
-	local_test_iteration=$9
 
-	echo "<?xml version=\"1.0\"?>"  > xml${local_instance}
-	echo "<profile name=\"${local_test_type}-${local_pk_size}B-${local_nthr}i\">" >> xml${local_instance}
-	echo "  <group nthreads=\"${1}\">" >> xml${local_instance}
-	case $local_test_type in
-		rr)
-			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
-			echo "      <flowop type=\"connect\" options=\"remotehost=${local_test_host} protocol=${local_protocal}\"/>" >> xml${local_instance}
-			echo "    </transaction>" >> xml${local_instance}
-			echo "    <transaction duration=\"${execution_time}s\">" >> xml${local_instance}
-			echo "      <flowop type=\"write\" options=\"count=${local_nthr} size=${local_pk_size}\"/>" >> xml${local_instance}
-			echo "      <flowop type=\"read\"  options=\"size=${local_pk_size}\"/>" >> xml${local_instance}
-			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
-			echo "      <flowop type=\"disconnect\" />" >> xml${local_instance}
-			echo "    </transaction>" >> xml${local_instance}
-		;;
-		stream|bidirec)
-			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
-			echo "      <flowop type=\"connect\" options=\"remotehost=${local_test_host} protocol=${local_protocal}\"/>" >> xml${local_instance}
-			echo "    </transaction>" >> xml${local_instance}
-			echo "    <transaction duration=\"${execution_time}s\">" >> xml${local_instance}
-			echo "      <flowop type=\"write\" options=\"count=${local_nthr} size=${local_pk_size}\"/>" >> xml${local_instance}
-			echo "    </transaction>" >> xml${local_instance}
-			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
-			echo "      <flowop type=\"disconnect\" />" >> xml${local_instance}
-			echo "    </transaction>" >> xml${local_instance}
-			;;
-		maerts|bidirec)
-			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
-			echo "      <flowop type=\"accept\" options=\"remotehost=${local_test_host} protocol=${local_protocal}\"/>" >> xml${local_instance}
-			echo "    </transaction>" >> xml${local_instance}
-			echo "    <transaction duration=\"${execution_time}s\">" >> xml${local_instance}
-			echo "      <flowop type=\"read\" options=\"${local_nthr} size=${local_pk_size}\"/>" >> xml${local_instance}
-			echo "    </transaction>" >> xml${local_instance}
-			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
-			echo "      <flowop type=\"disconnect\" />" >> xml${local_instance}
-			echo "    </transaction>" >> xml${local_instance}
-			;;
-	esac
-	echo "  </group>" >> xml${local_instance}
-	echo "</profile>" >> xml${local_instance}
-
-	results_file="results_${local_test_type}_nj=${local_nthr}_pt=${local_protocal}_ps=${local_pk_size}_nets=${local_numb_networks}_iteration=${local_test_iteration}"
-	if [ ${local_instance} -eq 1 ]; then
-		results_file_worker="${results_file}_itera=${local_iteration}.${local_instance}_${results_suffix}"
-	else
-		results_file_worker="debug_${results_file}_itera=${local_iteration}.${local_instance}_${results_suffix}"
-	fi
-}
-
-install_uperf()
-{
-	cd /$to_home_root/$to_user/workloads
-	git clone https://github.com/uperf/uperf.git uperf
-	cd uperf
-	autoreconf -f -i
-	./configure
-	touch *
-	make install
-	cd
-}
-
-execute_test()
-{
-	net_file=""
-	test_iteration=$1
-	net_count=1
-	network_list=`ifconfig -a | grep flags | cut -d: -f1`
-	timestamp=`date +%u%t%T`
-
-	for nets in $networks;do
-		build_xml "${njobs}" "${packet_type}" "${packet_size}" "${nets}" "${net_count}" "${network_count}" "1" "${test_case}" "${test_iteration}"
-		echo "# Time period: $timestamp" > $results_file_worker
-		echo "/usr/local/bin/uperf -m xml${net_count} >> $results_file_worker"
-		if [ $net_count -eq 1 ]; then
-			net_file=${uperf_results}/${results_file_worker}_stats
-			for nets in ${network_list}; do
-				ethtool -S ${nets} > ${uperf_results}/net_stats_${nets}_iter_${test_iteration}.before
-			done
-		fi
-		/usr/local/bin/uperf -m xml${net_count} >> $results_file_worker &
-		pids[${net_count}]=$!
-		let "net_count=$net_count+1"
-	done
-	# Adjust it down.
-	for pid in ${pids[*]}; do
-		wait $pid
-	done
-	for nets in ${network_list}; do
-		ethtool -S ${nets} > ${uperf_results}/net_stats_${nets}_iter_${test_iteration}.after
-	done
-#
-# Collapse results files now
-#
-	cat "${results_file}"*  >> ${uperf_results}/summary_${results_file}_${results_suffix}
-	#
-	# Report failures
-	#
-	if [ -f ${uperf_results}/summary_${results_file}_${results_suffix} ]; then
-		lines=`wc -l ${uperf_results}/summary_${results_file}_${results_suffix} | cut -d' ' -f1`
-	else
-		lines=1
-	fi
-	echo $lines >> /tmp/debugging
-	if [ $lines -eq 1 ]; then
-		echo Failed >> ${uperf_results}/test_results_report
-	else
-		echo Ran >> ${uperf_results}/test_results_report
-	fi
-	cp ${results_file} ${uperf_results}
-	rm -f "${results_file}"*
-	rm -f debug*
-	rm -f xml*
-}
-
-#
-# Break the loops for the test into their own functions.  Doing so keeps the indentation
-# under control.
-#
-test_iteration_loop()
-{
-	systemctl stop firewalld
-	for test_iteration  in 1 `seq 2 1 $to_times_to_run`;
-	do
-		execute_test $test_iteration
-		for client_ip in $client_ip_list; do
-			ssh -oStrictHostKeyChecking=no $client_ip "pkill -9 uperf"
-		done
-		#
-		# Restart uperf on the remote systems.
-		#
-		uperf_start_remote 
-		if [ $time_delay -ne 0 ]; then
-			echo sleeping for $time_delay
-			sleep $time_delay
-		fi
-	done
-}
-
-packet_size_loop()
-{
-	for packet_size in $packet_size_do;do
-		test_iteration_loop
-	done
-}
-
-packet_type_loop()
-{
-	for packet_type in $packets_do;do
-		packet_size_loop
-	done
-}
-
-njobs_loop()
-{
-	for  njobs in $numb_jobs_do; do
-		packet_type_loop
-	done
-}
-
-client_ip_loop()
-{
-	for client_ip in $client_ip_list; do
-		if [[ -z $networks ]]; then
-			networks=$client_ip
-			network_count=1
-		else
-			networks+=" "$client_ip
-			let "network_count=$network_count+1"
-		fi
-		if [ $network_count -lt $networks_using ]; then
-			continue
-		fi
-		if [ $network_count -gt $networks_using ]; then
-			network_done=1;
-		fi
-		if [ $network_count -gt $number_networks ]; then
-			network_done=1;
-		fi
-		if [ $network_done -eq 1 ]; then
-			break
-		fi
-		njobs_loop
-	done
-}
-
-network_list_loop()
-{
-	for networks_using in $network_list; do
-		if [ $network_done -eq 1 ]; then
-			break
-		fi
-		client_ip_loop
-	done
-}
-
-#
-# pbench operations
-#
-# Run pbench uperf with the appropriate options
-#
-run_pbench_uperf_test()
-{
-	if [ $use_pbench_version -eq 1 ]; then
-		#
-		# Get the number of ips.
-		#
-		server_ips_use=`echo $server_ips | cut -d',' -f1-$networks_to_run`
-		client_ips_use=`echo $client_ips | cut -d',' -f1-$networks_to_run`
-		echo pbench-uperf  -r $execution_time -m $packet_size -p tcp -i $numb_jobs -S $server_ips_use -C $client_ips_use --config=${to_tuned_setting} ${max_stddev} -t ${tests} >> /tmp/net_log
-		#
-		# Start the pbench uperf test.
-		#
-		pbench-uperf  -r $execution_time -m $packet_size -p $packet_type -i $numb_jobs -S $server_ips_use -C $client_ips_use --config=${to_tuned_setting} ${max_stddev} -t ${tests}
-	else
-		echo calling execute_via_pbench >> /tmp/debugging
-		$TOOLS_BIN/execute_via_pbench --cmd_executing "$0" $arguments --test $test_name --spacing 11 --pbench_stats $to_pstats
-		echo returned from execute_via_pbench >> /tmp/debugging
-	fi
-}
-
-#
-# Save the uperf results, both via pbench repo and tar file.
-#
-save_pbench_results()
-{
-	cd /var/lib/pbench-agent/
-	mkdir export_uperf_data
-	for i in `ls -d uperf_*`
-	do
-		mkdir export_uperf_data/$i
-		cp $i/result.csv export_uperf_data/$i
-		cp $i/result.txt export_uperf_data/$i
-	done
-	tar hcf /tmp/results_pbench_uperf_${to_tuned_setting}.tar export_uperf_data
-
-	value=`$TOOLS_BIN/set_pbench_variables --host_config $to_configuration --sys_type $to_sys_type --test ${test_name} --pbench_user $to_puser --run_label $to_run_label`
-	results_prefix=`echo $value | cut -d: -f 2`
-	hostname=`echo $value | cut -d: -f 1`
-	echo $TOOLS_BIN/pbench_copy_data --hostname "${hostname}" --user "${to_puser}" --prefix ${results_prefix} >> /tmp/debugging
-	$TOOLS_BIN/pbench_copy_data --hostname "${hostname}" --user "${to_puser}" --prefix ${results_prefix}
-}
 
 
 ARGUMENT_LIST=(
@@ -674,6 +680,10 @@ number_networks=`echo $worker | wc -w`
 #
 # Install epel if RH and then handle locations, else build it.
 #
+echo "****************************************************************************************"
+echo ${home_root}
+echo ${user}
+
 ${run_dir}/uperf_build $home_root $user
 
 #
@@ -681,8 +691,9 @@ ${run_dir}/uperf_build $home_root $user
 #
 uperf_start_remote 
 
-
+echo "**********************************************************************************************"
 uperf_results=uperf_results_${results_suffix}_$(date "+%Y.%m.%d-%H.%M.%S")
+echo ${uperf_results}
 mkdir ${uperf_results}
 
 packets_do=`echo $packet_type | sed 's/,/ /g'`
