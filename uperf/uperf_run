@@ -52,7 +52,7 @@ error_out()
 
 ssh_and_check_error()
 {
-	ssh -f -oStrictHostKeyChecking=no root@$1 "$2"
+	ssh -oStrictHostKeyChecking=no root@$1 "$2"
 	if [ $? -ne 0 ]; then
 		error_out "Failed: ssh -oStrictHostKeyChecking=no root@$1 $2" 1
 	fi
@@ -131,7 +131,7 @@ uperf_start_remote()
 		echo Firewall Status: $client
 		echo ==================
 		ssh_and_check_error $client "systemctl status firewalld"
-		ssh_and_check_error $client "nohup /usr/local/bin/uperf -s &"
+		ssh -f -oStrictHostKeyChecking=no root@$client "nohup /usr/local/bin/uperf -s &"
 	done
 	#
 	# Give it all a chance.
