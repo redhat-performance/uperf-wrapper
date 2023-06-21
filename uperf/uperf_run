@@ -127,10 +127,13 @@ uperf_start_remote()
 		scp -oStrictHostKeyChecking=no ${run_dir}/uperf_build root@$client:${to_home_root}/${to_user}/uperf_build
 		ssh_and_check_error $client "chmod 755 ${to_home_root}/${to_user}/uperf_build"
 		ssh_and_check_error $client "${to_home_root}/${to_user}/uperf_build ${to_home_root} ${to_user}"
-		ssh_and_check_error $client "systemctl stop firewalld 2> /dev/null"
+		#
+		# As firewall section can return error codes that are valid, do not check for errors.
+		#
+		ssh -oStrictHostKeyChecking=no root@$client "systemctl stop firewalld 2> /dev/null"
 		echo Firewall Status: $client
 		echo ==================
-		ssh_and_check_error $client "systemctl status firewalld"
+		ss -oStrictHostKeyChecking=no root@$client "systemctl status firewalld"
 		ssh -f -oStrictHostKeyChecking=no root@$client "nohup /usr/local/bin/uperf -s &"
 	done
 	#
