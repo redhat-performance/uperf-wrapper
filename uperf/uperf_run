@@ -133,7 +133,7 @@ uperf_start_remote()
 		ssh -oStrictHostKeyChecking=no root@$client "systemctl stop firewalld 2> /dev/null"
 		echo Firewall Status: $client
 		echo ==================
-		ss -oStrictHostKeyChecking=no root@$client "systemctl status firewalld"
+		ssh -oStrictHostKeyChecking=no root@$client "systemctl status firewalld"
 		ssh -f -oStrictHostKeyChecking=no root@$client "nohup /usr/local/bin/uperf -s &"
 	done
 	#
