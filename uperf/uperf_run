@@ -31,6 +31,7 @@ if [ ! -f "uperf.out" ]; then
 fi
 
 curdir=`pwd`
+
 if [[ $0 == "./"* ]]; then
 	chars=`echo $0 | awk -v RS='/' 'END{print NR-1}'`
 	if [[ $chars == 1 ]]; then
@@ -39,9 +40,15 @@ if [[ $0 == "./"* ]]; then
 		run_dir=`echo $0 | cut -d'/' -f 1-${chars} | cut -d'.' -f2-`
 		run_dir="${curdir}${run_dir}"
 	fi
+elif [[ $0 != "/"* ]]; then
+	dir=`echo $0 | rev | cut -d'/' -f2- | rev`
+	run_dir="${curdir}/${dir}"
 else
 	chars=`echo $0 | awk -v RS='/' 'END{print NR-1}'`
 	run_dir=`echo $0 | cut -d'/' -f 1-${chars}`
+	if [[ $run_dir != "/"* ]]; then
+		run_dir=${curdir}/${run_dir}
+	fi
 fi
 
 error_out()
@@ -74,9 +81,6 @@ results_file=""
 results_suffix=""
 networks_to_run="1,2,3,4,6,8,12,16,20,24,28,32"
 client_ip_list=""
-njobs=""
-packet_type=""
-packet_size=""
 nets=""
 net_count=""
 network_count=""
@@ -115,7 +119,7 @@ usage()
 	echo "  --time_delay <x>: Delay x seconds before the next iteration is started."
 	echo "  --tools_git: Pointer to the test_tools git.  Default is ${tools_git}.  Top directory is always test_tools"
 	echo " --use_pbench_version: Instead of running the wrappers version"
-	echo "     of linpack, use pbench-linpack when pbench is requested"
+	echo "     of uperf, use pbench-uperf when pbench is requested"
 	source test_tools/general_setup --usage
 }
 
@@ -198,11 +202,17 @@ fi
 
 ${curdir}/test_tools/gather_data ${curdir}
 source test_tools/general_setup "$@"
+#
+# If running as root, home dir is /
+# This is for uperf only, as we access the remote system as root.
+#
 
+if [[ ${to_user} == "root" ]]; then
+	to_home_root="/"
+fi
 #
 # Reduce the data placing it into csv file format.
 #
-
 
 create_header()
 {
@@ -703,6 +713,15 @@ while [[ $# -gt 0 ]]; do
 done
 shift $((OPTIND-1))
 
+if [[ $client_ips == "" ]]; then
+	echo Please designate the client ips
+	read client_ips
+fi
+if [[ $server_ips == "" ]]; then
+	echo Please designate the client ips
+	read server_ips
+fi
+
 worker=`echo $server_ips | sed "s/,/ /g"`
 number_networks=`echo $worker | wc -w`
 
@@ -728,7 +747,7 @@ networks=""
 network_count=0
 
 if [ $to_pbench -eq 0 ]; then
-	
+
 	network_list=`echo $networks_to_run | sed 's/,/ /g'`
 	
 	for test_case in $test_types; do
