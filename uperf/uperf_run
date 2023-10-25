@@ -728,7 +728,7 @@ number_networks=`echo $worker | wc -w`
 #
 # Install epel if RH and then handle locations, else build it.
 #
-${run_dir}/uperf_build $home_root $user
+${run_dir}/uperf_build $to_home_root $to_user
 
 #
 # Start uperf on the remote systems.
