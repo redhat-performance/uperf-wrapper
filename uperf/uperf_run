@@ -609,7 +609,7 @@ save_pbench_results()
 		cp $i/result.txt $uperf_results/$i
 	done
 	echo $test_results_file_out > $uperf_results/test_results_report
-	${curdir}/test_tools/save_results --curdir $curdir --home_root $to_home_root --copy_dir "$uperf_results" --test_name ${test_name}_$test --tuned_setting=$to_tuned_setting --version None --user $to_user
+	${curdir}/test_tools/save_results --curdir $curdir --home_root $to_home_root --copy_dir "$uperf_results" --test_name ${test_name} --tuned_setting=$to_tuned_setting --version None --user $to_user
 
 	value=`$TOOLS_BIN/set_pbench_variables --host_config $to_configuration --sys_type $to_sys_type --test ${test_name} --pbench_user $to_puser --run_label $to_run_label`
 	results_prefix=`echo $value | cut -d: -f 2`
@@ -768,7 +768,7 @@ if [ $to_pbench -eq 0 ]; then
 	popd
 	${curdir}/test_tools/move_data $curdir $uperf_results
 	cp ${curdir}/uperf.out $uperf_results
-	${curdir}/test_tools/save_results --curdir $curdir --home_root $to_home_root --copy_dir "$uperf_results" --test_name ${test_name}_$test --tuned_setting=$to_tuned_setting --version None --user $to_user
+	${curdir}/test_tools/save_results --curdir $curdir --home_root $to_home_root --copy_dir "$uperf_results" --test_name ${test_name} --tuned_setting=$to_tuned_setting --version None --user $to_user
 else
 	value=`$TOOLS_BIN/set_pbench_variables --host_config $to_configuration --sys_type $to_sys_type --test uperf --pbench_user $to_puser --run_label $to_run_label`
 	hostname=`echo $value | cut -d: -f 1`
