@@ -114,7 +114,7 @@ usage()
 	echo "  --packet_type:  comma separated list of packet types, (tcp,udp)"
 	echo "  --server_ips: comma separated list of the server ip addresses"
 	echo "  --suffix: Suffix to add to the results file"
-	echo "  --test_types:  stream,rr,maerts,bidirec"
+	echo "  --tests:  stream,rr,maerts,bidirec"
 	echo "  --time:  number of seconds to run the test for"
 	echo "  --time_delay <x>: Delay x seconds before the next iteration is started."
 	echo "  --tools_git: Pointer to the test_tools git.  Default is ${tools_git}.  Top directory is always test_tools"
