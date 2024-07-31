@@ -598,10 +598,9 @@ save_pbench_results()
 {
 	test_results_file_out="Failed"
 	cd /var/lib/pbench-agent/
-	mkdir $uperf_results 
 	for i in `ls -d uperf_*`
 	do
-		mkdir $uperf_results/$i
+		mkdir -p $uperf_results/$i
 		cp $i/result.csv $uperf_results/$i
 		if [ $? -eq 0 ]; then
 			test_results_file_out="Ran: At least some of the pbench tests ran."
