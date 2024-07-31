@@ -596,15 +596,19 @@ run_pbench_uperf_test()
 #
 save_pbench_results()
 {
+	test_results_file_out="Failed"
 	cd /var/lib/pbench-agent/
-	mkdir export_uperf_data
 	for i in `ls -d uperf_*`
 	do
-		mkdir export_uperf_data/$i
-		cp $i/result.csv export_uperf_data/$i
-		cp $i/result.txt export_uperf_data/$i
+		mkdir -p $uperf_results/$i
+		cp $i/result.csv $uperf_results/$i
+		if [ $? -eq 0 ]; then
+			test_results_file_out="Ran: At least some of the pbench tests ran."
+		fi
+		cp $i/result.txt $uperf_results/$i
 	done
-	tar hcf /tmp/results_pbench_uperf_${to_tuned_setting}.tar export_uperf_data
+	echo $test_results_file_out > $uperf_results/test_results_report
+	${curdir}/test_tools/save_results --curdir $curdir --home_root $to_home_root --copy_dir "$uperf_results" --test_name ${test_name} --tuned_setting=$to_tuned_setting --version None --user $to_user
 
 	value=`$TOOLS_BIN/set_pbench_variables --host_config $to_configuration --sys_type $to_sys_type --test ${test_name} --pbench_user $to_puser --run_label $to_run_label`
 	results_prefix=`echo $value | cut -d: -f 2`
@@ -763,7 +767,7 @@ if [ $to_pbench -eq 0 ]; then
 	popd
 	${curdir}/test_tools/move_data $curdir $uperf_results
 	cp ${curdir}/uperf.out $uperf_results
-	tar hcf /tmp/results_uperf_${to_tuned_setting}.tar $uperf_results
+	${curdir}/test_tools/save_results --curdir $curdir --home_root $to_home_root --copy_dir "$uperf_results" --test_name ${test_name} --tuned_setting=$to_tuned_setting --version None --user $to_user
 else
 	value=`$TOOLS_BIN/set_pbench_variables --host_config $to_configuration --sys_type $to_sys_type --test uperf --pbench_user $to_puser --run_label $to_run_label`
 	hostname=`echo $value | cut -d: -f 1`
