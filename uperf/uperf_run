@@ -67,6 +67,7 @@ ssh_and_check_error()
 
 source .bashrc
 
+uperf_version="1.0"
 test_name="uperf"
 rtc=0
 results_file_worker=""
@@ -322,11 +323,13 @@ organize_data()
 	# Now process the results
 	#
 	pushd net_results > /dev/null
+	$TOOLS_BIN/test_header_info --front_matter --results_file $working_dir/results_uperf.csv --host $to_configuration --sys_type $to_sys_type --tuned $to_tuned_setting --results_version $uperf_version --test_name $test_name
 	for tt in `ls`; do
 		pushd $tt > /dev/null
 		for pt in `ls`; do
 			cd $pt
 			for ps in `ls`; do
+				$TOOLS_BIN/test_header_info --results_file $working_dir/results_uperf.csv --meta_output "Test type: $tt" --meta_output "Packet type: $pt" --meta_output "Packet size: $ps"
 				cd $ps
 				for nn in `ls`; do
 					cd $nn
