@@ -138,7 +138,7 @@ uperf_start_remote()
 		ssh -oStrictHostKeyChecking=no root@$client "systemctl stop firewalld 2> /dev/null"
 		echo Firewall Status: $client
 		echo ==================
-		ssh -oStrictHostKeyChecking=no root@$client "systemctl --no_pager status firewalld"
+		ssh -oStrictHostKeyChecking=no root@$client "systemctl --no-pager status firewalld"
 		ssh -f -oStrictHostKeyChecking=no root@$client "nohup /usr/local/bin/uperf -s &"
 	done
 	#
@@ -494,7 +494,7 @@ test_iteration_loop()
 	systemctl stop firewalld 2> /devnull
 	echo Firewall status
 	echo ====================
-	systemctl --no_pager status firewalld
+	systemctl --no-pager status firewalld
 	for test_iteration  in 1 `seq 2 1 $to_times_to_run`;
 	do
 		execute_test $test_iteration
