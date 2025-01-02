@@ -450,6 +450,11 @@ execute_test()
 				ethtool -S ${nets} > ${uperf_results}/net_stats_${nets}_iter_${test_iteration}.before
 			done
 		fi
+		#
+		# Note: We expext /root to be writeable.  We are unsure at this
+		#	time but we might have to use /var/roothome if using
+		#	bootc images.
+		#
 		for client in $client_ip_list; do
 			scp xml${net_count} root@$client:/root/xml${net_count} > /dev/null
 			ssh -oStrictHostKeyChecking=no root@$client "/usr/local/bin/uperf -m /root/xml${net_count}" >> $results_file_worker &
@@ -501,6 +506,10 @@ test_iteration_loop()
 	for test_iteration  in 1 `seq 2 1 $to_times_to_run`;
 	do
 		execute_test $test_iteration
+		#
+		# We need to use the -x option so we only kill off uperf and not
+		# uperf_run also.
+		#
 		for client_ip in $server_ip_list; do
 			ssh -oStrictHostKeyChecking=no $client_ip "pkill -x -9 uperf"
 		done
@@ -785,6 +794,10 @@ else
 		save_pbench_results
 	fi
 fi
+#
+# We need to use the -x option so we only kill off uperf and not
+# uperf_run also.
+#
 for client in $server_ip_list; do
 	ssh -oStrictHostKeyChecking=no root@$client "pkill -x -9 uperf"
 done
