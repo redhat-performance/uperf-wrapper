@@ -451,7 +451,7 @@ execute_test()
 			done
 		fi
 		#
-		# Note: We expext /root to be writeable.  We are unsure at this
+		# Note: We expect /root to be writeable.  We are unsure at this
 		#	time but we might have to use /var/roothome if using
 		#	bootc images.
 		#
