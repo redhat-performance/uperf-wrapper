@@ -1,28 +1,120 @@
 #!/bin/bash
 
-install_uperf()
+error_out()
 {
-	cd /$1/$2/workloads/uperf_run
-	git clone https://github.com/uperf/uperf.git uperf
-	cd uperf
-	autoreconf -f -i
-	./configure
-	touch *
-	make install
-	cd
+	echo $1
+	exit $2
 }
 
-cat /proc/version | grep "Red Hat" > /dev/null
-if [ $? -eq 0 ]; then
-	yum install epel-release.noarch
+usage()
+{
+	echo Usage ${1}:
+	echo "  --tools_git <git repo>: Git repo that contains the test_tools."
+	echo "  --usage: This usage message."
+	echo "  --user_dir <dir>: The users home directory."
+	exit $2
+}
+
+
+install_uperf()
+{
+	pushd /$1/$2/workloads/uperf_run > /dev/null
+	if [ ! -d uperf ]; then
+		git clone https://github.com/uperf/uperf.git uperf
+		if [[ $? -ne 0 ]]; then
+			error_out "ggit clone https://github.com/uperf/uperf.git failed"
+		fi
+	fi
+	cd uperf
+	autoreconf -f -i
+	if [[ $? -ne 0 ]]; then
+		error_out "uperf: autoreconf failed" 1
+	fi
+	./configure
+	if [[ $? -ne 0 ]]; then
+		error_out "uperf: configure failed" 1
+	fi
+	touch *
+	make install
+	if [[ $? -ne 0 ]]; then
+		error_out "uperf: make install failed" 1
+	fi
+	popd > /dev/null
+}
+
+ARGUMENT_LIST=(
+	"tools_git"
+	"user_dir"
+)
+
+NO_ARGUMENTS=(
+	"usage"
+)
+
+# read arguments
+opts=$(getopt \
+	--longoptions "$(printf "%s:," "${ARGUMENT_LIST[@]}")" \
+	--longoptions "$(printf "%s," "${NO_ARGUMENTS[@]}")" \
+	--name "$(basename "$0")" \
+	--options "h" \
+	-- "$@"
+)
+
+if [ $? -ne 0 ]; then
+	error_out "Parsing arguments failed" 1
 fi
+
+eval set --$opts
+user_dir=`pwd`
+
+while [[ $# -gt 0 ]]; do
+	case "${1}" in
+		--tools_git)
+			tools_git=$2
+			shift 2
+		;;
+		--user_dir)
+			user_dir=$2
+			shift 2
+		;;
+		--usage)
+			usage $0 0
+		;;
+		-h)
+			usage $0 0
+		;;
+		--)
+			break
+		;;
+		*)
+			echo $1 is a bad option
+			usage $0 1
+		;;
+	esac
+done
+
+if [ ! -d "test_tools" ]; then
+	#
+	# Clone the tools if required.
+	#
+	git clone $tools_git test_tools
+	if [ $? -ne 0 ]; then
+		error_out "pulling git $tools_git failed." 1
+	fi
+fi
+
+os=`test_tools/detect_os `
+if [[ $os == "rhel" ]] || [[ $os == "fedora" ]]; then
+	yum install -y epel-release.noarch
+fi
+
 if [ -f "/bin/uperf" ]; then
 	if [ ! -f "/usr/local/bin/uperf" ]; then
-        	cp /bin/uperf /usr/local/bin/uperf
-        	chmod 755 /usr/local/bin/uperf
+		cp /bin/uperf /usr/local/bin/uperf
+		chmod 755 /usr/local/bin/uperf
 	fi
 else
-        if [[ ! -f "/usr/local/bin/uperf" ]]; then
-                install_uperf $1 $2
-        fi
+	if [[ ! -f "/usr/local/bin/uperf" ]]; then
+		install_uperf $user_dir
+	fi
 fi

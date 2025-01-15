@@ -129,7 +129,7 @@ uperf_start_remote()
 		ssh_and_check_error $server "ls /dev > /dev/null"
 		scp -oStrictHostKeyChecking=no ${run_dir}/uperf_build root@$server:${to_home_root}/${to_user}/uperf_build
 		ssh_and_check_error $server "chmod 755 ${to_home_root}/${to_user}/uperf_build"
-		ssh_and_check_error $server "${to_home_root}/${to_user}/uperf_build ${to_home_root} ${to_user}"
+		ssh_and_check_error $server "${to_home_root}/${to_user}/uperf_build --user ${to_home_root}/${to_user} --tools_git ${tools_git}"
 		#
 		# As firewall section can return error codes that are valid, do not check for errors.
 		#
@@ -747,7 +747,7 @@ number_networks=`echo $server_ip_list | wc -w`
 #
 # Install epel if RH and then handle locations, else build it.
 #
-${run_dir}/uperf_build $home_root $user
+${run_dir}/uperf_build --user $to_home_root/$to_user --tools_git "$tools_git"
 
 #
 # Start uperf on the remote systems.
