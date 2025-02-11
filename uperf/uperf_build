@@ -2,6 +2,7 @@
 
 install_uperf()
 {
+	mkdir -p /$1/$2/workloads/uperf_run
 	cd /$1/$2/workloads/uperf_run
 	git clone https://github.com/uperf/uperf.git uperf
 	cd uperf
