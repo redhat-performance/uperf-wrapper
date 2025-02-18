@@ -2,6 +2,9 @@
 
 install_uperf()
 {
+	if [[ ! -d /$1/$2/workloads/uperf_run ]]; then
+		mkdir -p /$1/$2/workloads/uperf_run
+	fi
 	cd /$1/$2/workloads/uperf_run
 	git clone https://github.com/uperf/uperf.git uperf
 	cd uperf
