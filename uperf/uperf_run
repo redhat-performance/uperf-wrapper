@@ -227,6 +227,19 @@ create_header()
 	echo "packet_size: $packet_size"
 }
 
+validate_run_data()
+{
+	rfile=$1
+	vfile=$2
+	$TOOLS_BIN/validate_line --results_file $rfile --base_results_file $vfile
+	if [[ $? -eq 0 ]]; then
+		echo Ran >> ${working_dir}/test_results_report
+	else
+		echo Failed >> ${working_dir}/test_results_report
+		rtc=1
+	fi
+}
+
 record_data()
 {
 	work_file=`mktemp /tmp/uperf_data.XXXXX`
@@ -285,8 +298,11 @@ record_data()
 	echo "" >> throughput.csv
 	echo "" >> iops.csv
 	echo "" >> latency.csv
+	validate_run_data  throughput.csv $run_dir/base_test_results/test1/verify_tp
 	cat throughput.csv >> $working_dir/results_uperf.csv
+	validate_run_data  iops.csv $run_dir/base_test_results/test1/verify_iops
 	cat iops.csv >> $working_dir/results_uperf.csv
+	validate_run_data  latency.csv $run_dir/base_test_results/test1/verify_latency
 	cat latency.csv >> $working_dir/results_uperf.csv
 	rm ${work_file}*
 }
@@ -483,11 +499,6 @@ execute_test()
 		lines=`wc -l ${uperf_results}/summary_${results_file}_${results_suffix} | cut -d' ' -f1`
 	else
 		lines=1
-	fi
-	if [ $lines -eq 1 ]; then
-		echo Failed >> ${uperf_results}/test_results_report
-	else
-		echo Ran >> ${uperf_results}/test_results_report
 	fi
 	cp ${results_file} ${uperf_results}
 	rm -f "${results_file}"*
