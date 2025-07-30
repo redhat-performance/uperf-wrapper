@@ -1,3 +1,15 @@
+#
+#  regexp explanation
+#  [1-9]{1}[0-9]{0,}:[1-9]{0,}\d*|\d*\.[1-9]{0,}\d*:[a-z]{1,}:[a-z]{1,}:[1-9][0-9]{0,}$
+#
+#   Field 1: (Instance count) [1-9]{1}[0-9]{0,}:  The number of uperf threads running.
+#            Positive non-zero value.
+#   Field 2: (Transactions/sec) [1-9]{0,}\d*|\d*\.[1-9]{0,}\d*: The number of
+#            trans actions per second.  Positive non-zero value.
+#   Field 3: (test type) [a-z]{1,}: Type of test that was executed. streams/udp etc
+#   Field 4: (packet size) [1-9][0-9]{0,}:  Size of network packets.  Positive
+#            non-zero value.
+#
 %_header
 Instance_Count:trans_sec
 %_multiples
