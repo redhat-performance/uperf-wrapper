@@ -65,6 +65,26 @@ ssh_and_check_error()
 	fi
 }
 
+
+cpu_intervals()
+{
+	cpus=`nproc`
+	interval=$1
+	stepping=`echo $cpus/$interval | bc`
+	#
+	# We want $interval, not $interval+1.  As we start from 1, not 
+	# $stepping, we need to adjust.
+	#
+	max_seq=`echo "${interval}*${stepping}-${stepping}-1" | bc`
+	cpu_oper=1
+	for cpu in `seq $stepping $stepping $max_seq`
+	do
+		cpu_oper=${cpu_oper},${cpu}
+	done
+	cpu_oper=$cpu_oper,$cpus
+	numb_jobs=$cpu_oper
+}
+
 uperf_version="1.0"
 test_name="uperf"
 rtc=0
@@ -633,6 +653,7 @@ save_pbench_results()
 
 ARGUMENT_LIST=(
 	"client_ips"
+	"intervals"
 	"max_stddev"
 	"networks_to_run"
 	"numb_jobs"
@@ -669,6 +690,10 @@ while [[ $# -gt 0 ]]; do
 	case "${1}" in
 		--client_ips)
 			client_ips=$value
+			shift 2
+		;;
+		--intervals)
+			cpu_intervals $2
 			shift 2
 		;;
 		--max_stddev)
@@ -743,6 +768,36 @@ fi
 client_ip_list=`echo $client_ips | sed "s/,/ /g"`
 server_ip_list=`echo $server_ips | sed "s/,/ /g"`
 number_networks=`echo $server_ip_list | wc -w`
+
+os=`$TOOLS_BIN/detect_os`
+if [[ $os == "ubuntu" ]]; then
+	echo "#!/bin/bash" > $TOOLS_BIN/set_ip
+	echo "ip_addr=\$1" >> $TOOLS_BIN/set_ip
+	echo "last_net=\"\"" >> $TOOLS_BIN/set_ip
+	echo "ifconfig -a > ifconfig.out" >> $TOOLS_BIN/set_ip
+	echo "while IFS= read -r run_data" >> $TOOLS_BIN/set_ip
+	echo "do" >> $TOOLS_BIN/set_ip
+	echo "inter=\`echo \"\$run_data\" | grep '^[a-zA-Z]'\`" >> $TOOLS_BIN/set_ip
+	echo "if [[ \$inter != \"\" ]]; then" >> $TOOLS_BIN/set_ip
+	echo "last_net=\$inter" >> $TOOLS_BIN/set_ip
+	echo "fi" >> $TOOLS_BIN/set_ip
+	echo "if [[ \$run_data == *\"10.0.25\"* ]]; then" >> $TOOLS_BIN/set_ip
+	echo "net=\`echo \$last_net | cut -d:  -f1\`" >> $TOOLS_BIN/set_ip
+	echo "ip addr add \$ip_addr dev $net" >> $TOOLS_BIN/set_ip
+	echo "break" >> $TOOLS_BIN/set_ip
+	echo "fi" >> $TOOLS_BIN/set_ip
+	echo "done < \"ifconfig.out\"" >> $TOOLS_BIN/set_ip
+
+        if [[ $server_ip_list != *" "* ]]; then
+                $TOOLS_BIN/set_ip $server_ips
+        fi
+        if [[ $client_ip_list != *" "* ]]; then
+                scp $TOOLS_BIN/set_ip root@$client_ip_list:/tmp
+                ssh root@$client_ip_list "chmod 755 /tmp/set_ip"
+                ssh root@$client_ip_list "/tmp/set_ip $client_ip_list"
+        fi
+
+fi
 
 #
 # Install epel if RH and then handle locations, else build it.
