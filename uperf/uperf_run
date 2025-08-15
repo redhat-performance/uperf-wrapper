@@ -787,6 +787,7 @@ if [[ $os == "ubuntu" ]]; then
 	echo "break" >> $TOOLS_BIN/set_ip
 	echo "fi" >> $TOOLS_BIN/set_ip
 	echo "done < \"ifconfig.out\"" >> $TOOLS_BIN/set_ip
+	chmod 755 $TOOLS_BIN/set_ip
 
         if [[ $server_ip_list != *" "* ]]; then
                 $TOOLS_BIN/set_ip $server_ips
