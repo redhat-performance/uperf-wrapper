@@ -268,6 +268,7 @@ record_data()
 	echo Instance_Count:trans_sec >> iops.csv
 	create_header $1 $2 $3 $4 Bandwidth Gb_sec throughput.csv
 	echo Instance_Count:GB_Sec >> throughput.csv
+	echo "Instance_Count:GB_Sec:trans_sec:lat_usec:test_type:packet_type:packet_size" > $working_dir/results_uperf.csv
 	#
 	# Now populate the files
 	#
@@ -281,13 +282,11 @@ record_data()
 		echo $threads:$bw:$rest >> throughput.csv
 		echo $threads:$iops:$rest >> iops.csv
 		echo $threads:$lat:$rest >> latency.csv
+		echo $threads:$bw:$iops:$lat:$rest >> $working_dir/results_uperf.csv
 	done < "${work_file}.sorted"
 	echo "" >> throughput.csv
 	echo "" >> iops.csv
 	echo "" >> latency.csv
-	cat throughput.csv >> $working_dir/results_uperf.csv
-	cat iops.csv >> $working_dir/results_uperf.csv
-	cat latency.csv >> $working_dir/results_uperf.csv
 	rm ${work_file}*
 }
 
