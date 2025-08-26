@@ -456,7 +456,7 @@ execute_test()
 		#	bootc images.
 		#
 		for client in $client_ip_list; do
-			scp xml${net_count} root@$client:/root/xml${net_count} > /dev/null
+			scp -oStrictHostKeyChecking=no xml${net_count} root@$client:/root/xml${net_count} > /dev/null
 			scp  -oStrictHostKeyChecking=no /usr/local/bin/uperf root@$client:/usr/local/bin/uperf
 			ssh_and_check_error $client "chmod 755 /usr/local/bin/uperf"
 			ssh -oStrictHostKeyChecking=no root@$client "/usr/local/bin/uperf -m /root/xml${net_count}" >> $results_file_worker &
