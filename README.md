@@ -22,6 +22,7 @@ Options
 Usage /root/specjbb-wrapper///specjbb/specjbb_run:
 ```
   --client_ips: comma separated list of the client ip addresses
+  -intervals <x>: creates x+1 intervals from 1 to ncpus
   --max_stddev: standard deviation of the pbench uperf runs
   --networks_to_run: how many networks are we to run.
   --numb_jobs: comma separated list of the number of jobs per network to run

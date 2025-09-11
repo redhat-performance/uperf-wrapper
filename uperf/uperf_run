@@ -107,6 +107,7 @@ usage()
 {
 	echo Usage ${1}:
 	echo "  --client_ips: comma separated list of the client ip addresses"
+	echo "  --intervals <x>: creates x+1 intervals from 1 to ncpus."
 	echo "  --max_stddev: standard deviation of the pbench uperf runs"
 	echo "  --networks_to_run: how many networks are we to run."
 	echo "  --numb_jobs: comma separated list of the number of jobs per network to run"
@@ -632,6 +633,7 @@ save_pbench_results()
 
 ARGUMENT_LIST=(
 	"client_ips"
+	"intervals"
 	"max_stddev"
 	"networks_to_run"
 	"numb_jobs"
@@ -668,6 +670,11 @@ while [[ $# -gt 0 ]]; do
 	case "${1}" in
 		--client_ips)
 			client_ips=$value
+			shift 2
+		;;
+		--intervals)
+			cpus=`nproc`
+			numb_jobs=`$TOOLS_BIN/generate_intervals --max_value $cpus --interval  $2`
 			shift 2
 		;;
 		--max_stddev)
