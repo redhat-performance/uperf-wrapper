@@ -96,7 +96,6 @@ max_stddev=""
 server_ips=""
 client_ips=""
 results_prefix=""
-use_pbench_version=0
 time_delay=0
 
 #
@@ -107,7 +106,6 @@ usage()
 {
 	echo Usage ${1}:
 	echo "  --client_ips: comma separated list of the client ip addresses"
-	echo "  --max_stddev: standard deviation of the pbench uperf runs"
 	echo "  --networks_to_run: how many networks are we to run."
 	echo "  --numb_jobs: comma separated list of the number of jobs per network to run"
 	echo "  --packet_sizes: comma separated list of packet sizes, (in bytes)"
@@ -118,8 +116,6 @@ usage()
 	echo "  --time:  number of seconds to run the test for"
 	echo "  --time_delay <x>: Delay x seconds before the next iteration is started."
 	echo "  --tools_git: Pointer to the test_tools git.  Default is ${tools_git}.  Top directory is always test_tools"
-	echo " --use_pbench_version: Instead of running the wrappers version"
-	echo "     of uperf, use pbench-uperf when pbench is requested"
 	source test_tools/general_setup --usage
 }
 
@@ -154,8 +150,6 @@ uperf_start_remote()
 # to_home_root: home directory
 # to_configuration: configuration information
 # to_times_to_run: number of times to run the test
-# to_pbench: Run the test via pbench
-# to_puser: User running pbench
 # to_run_label: Label for the run
 # to_user: User on the test system running the test
 # to_sys_type: for results info, basically aws, azure or local
@@ -579,57 +573,6 @@ network_list_loop()
 	done
 }
 
-#
-# pbench operations
-#
-# Run pbench uperf with the appropriate options
-#
-run_pbench_uperf_test()
-{
-	if [ $use_pbench_version -eq 1 ]; then
-		#
-		# Get the number of ips.
-		#
-		server_ips_use=`echo $server_ips | cut -d',' -f1-$networks_to_run`
-		client_ips_use=`echo $client_ips | cut -d',' -f1-$networks_to_run`
-		echo pbench-uperf  -r $execution_time -m $packet_size -p tcp -i $numb_jobs -S $server_ips_use -C $client_ips_use --config=${to_tuned_setting} ${max_stddev} -t ${tests} >> /tmp/net_log
-		#
-		# Start the pbench uperf test.
-		#
-		pbench-uperf  -r $execution_time -m $packet_size -p $packet_type -i $numb_jobs -S $server_ips_use -C $client_ips_use --config=${to_tuned_setting} ${max_stddev} -t ${tests}
-		rtc=$?
-	else
-		$TOOLS_BIN/execute_via_pbench --cmd_executing "$0" $arguments --test $test_name --spacing 11 --pbench_stats $to_pstats
-		rtc=$?
-	fi
-}
-
-#
-# Save the uperf results, both via pbench repo and tar file.
-#
-save_pbench_results()
-{
-	test_results_file_out="Failed"
-	cd /var/lib/pbench-agent/
-	for i in `ls -d uperf_*`
-	do
-		mkdir -p $uperf_results/$i
-		cp $i/result.csv $uperf_results/$i
-		if [ $? -eq 0 ]; then
-			test_results_file_out="Ran: At least some of the pbench tests ran."
-		fi
-		cp $i/result.txt $uperf_results/$i
-	done
-	echo $test_results_file_out > $uperf_results/test_results_report
-	${curdir}/test_tools/save_results --curdir $curdir --home_root $to_home_root --copy_dir "$uperf_results" --test_name ${test_name} --tuned_setting=$to_tuned_setting --version None --user $to_user
-
-	value=`$TOOLS_BIN/set_pbench_variables --host_config $to_configuration --sys_type $to_sys_type --test ${test_name} --pbench_user $to_puser --run_label $to_run_label`
-	results_prefix=`echo $value | cut -d: -f 2`
-	hostname=`echo $value | cut -d: -f 1`
-	$TOOLS_BIN/pbench_copy_data --hostname "${hostname}" --user "${to_puser}" --prefix ${results_prefix}
-}
-
-
 ARGUMENT_LIST=(
 	"client_ips"
 	"max_stddev"
@@ -645,7 +588,6 @@ ARGUMENT_LIST=(
 )
 
 NO_ARGUMENTS=(
-	"use_pbench_version"
 )
 
 # read arguments
@@ -715,10 +657,6 @@ while [[ $# -gt 0 ]]; do
 			tools_git=$value
 			shift 2
 		;;
-		--use_pbench_version)
-			use_pbench_version=1
-			shift 1
-		;;
 		--)
 			break
 		;;
@@ -764,37 +702,22 @@ test_types=`echo $tests | sed 's/,/ /g'`
 networks=""
 network_count=0
 
-if [ $to_pbench -eq 0 ]; then
-
-	network_list=`echo $networks_to_run | sed 's/,/ /g'`
+network_list=`echo $networks_to_run | sed 's/,/ /g'`
 	
-	for test_case in $test_types; do
-		networks=""
-		network_count=0
-		network_done=0
-	
-		network_list_loop
-	done
+for test_case in $test_types; do
+	networks=""
+	network_count=0
+	network_done=0
 
-	pushd $uperf_results
-	organize_data
-	popd
-	${curdir}/test_tools/move_data $curdir $uperf_results
-	cp ${curdir}/uperf.out $uperf_results
-	${curdir}/test_tools/save_results --curdir $curdir --home_root $to_home_root --copy_dir "$uperf_results" --test_name ${test_name} --tuned_setting=$to_tuned_setting --version None --user $to_user
-else
-	value=`$TOOLS_BIN/set_pbench_variables --host_config $to_configuration --sys_type $to_sys_type --test uperf --pbench_user $to_puser --run_label $to_run_label`
-	hostname=`echo $value | cut -d: -f 1`
-	export hostname
-	results_prefix=`echo $value | cut -d: -f 2`
+	network_list_loop
+done
 
-	user="user_"$to_puser
-
-	run_pbench_uperf_test
-	if [ $use_pbench_version -eq 1 ]; then
-		save_pbench_results
-	fi
-fi
+pushd $uperf_results
+organize_data
+popd
+${curdir}/test_tools/move_data $curdir $uperf_results
+cp ${curdir}/uperf.out $uperf_results
+${curdir}/test_tools/save_results --curdir $curdir --home_root $to_home_root --copy_dir "$uperf_results" --test_name ${test_name} --tuned_setting=$to_tuned_setting --version None --user $to_user
 #
 # We need to use the -x option so we only kill off uperf and not
 # uperf_run also.
