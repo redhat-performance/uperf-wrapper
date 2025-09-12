@@ -22,6 +22,7 @@
 # uperf_run automates the execution of the uperf test.
 #
 arguments="$@"
+pdir=""
 
 if [ ! -f "uperf.out" ]; then
         command="${0} ${@}"
@@ -430,6 +431,9 @@ execute_test()
 	timestamp=`date +%u%t%T`
 	pindex=0
 
+	if [[ $to_use_pcp -eq 1 ]]; then
+		start_pcp_subset
+	fi
 	for nets in $networks;do
 		build_xml "${njobs}" "${packet_type}" "${packet_size}" "${nets}" "${net_count}" "${network_count}" "1" "${test_case}" "${test_iteration}"
 		if [ $? -ne 0 ]; then
@@ -462,6 +466,12 @@ execute_test()
 	for pid in ${pids[*]}; do
 		wait $pid
 	done
+	if [[ $to_use_pcp -eq 1 ]]; then
+		echo "Send result to PCP archive"
+		out="network_iter_${test_iters}"
+		result2pcp iteration_${test_iteration} ${out}
+		stop_pcp_subset
+	fi
 	for nets in ${network_list}; do
 		ethtool -S ${nets} > ${uperf_results}/net_stats_${nets}_iter_${test_iteration}.after
 	done
@@ -676,6 +686,9 @@ if [[ $server_ips == "" ]]; then
 	echo Please designate the server ips
 	read server_ips
 fi
+if [[ $to_use_pcp -eq 1 ]]; then
+	pdir=/tmp/pcp_`date "+%Y.%m.%d-%H.%M.%S"`
+fi
 
 client_ip_list=`echo $client_ips | sed "s/,/ /g"`
 server_ip_list=`echo $server_ips | sed "s/,/ /g"`
@@ -692,7 +705,7 @@ ${run_dir}/uperf_build $home_root $user
 uperf_start_remote 
 
 
-uperf_results=uperf_results_${results_suffix}_$(date "+%Y.%m.%d-%H.%M.%S")
+uperf_results=/tmp/uperf_results_${results_suffix}_$(date "+%Y.%m.%d-%H.%M.%S")
 mkdir ${uperf_results}
 
 packets_do=`echo $packet_type | sed 's/,/ /g'`
@@ -703,21 +716,35 @@ networks=""
 network_count=0
 
 network_list=`echo $networks_to_run | sed 's/,/ /g'`
-	
+
+if [[ $to_use_pcp -eq 1 ]]; then
+	source $TOOLS_BIN/pcp/pcp_commands.inc
+	setup_pcp
+	pcp_cfg=$TOOLS_BIN/pcp/default.cfg
+fi
+
+if [[ $to_use_pcp -eq 1 ]]; then
+	echo "Start PCP"
+	start_pcp ${pdir}/ uperf $pcp_cfg
+fi
 for test_case in $test_types; do
 	networks=""
 	network_count=0
 	network_done=0
-
 	network_list_loop
 done
+if [[ $to_use_pcp -eq 1 ]]; then
+	shutdown_pcp
+fi
 
 pushd $uperf_results
 organize_data
 popd
 ${curdir}/test_tools/move_data $curdir $uperf_results
 cp ${curdir}/uperf.out $uperf_results
-${curdir}/test_tools/save_results --curdir $curdir --home_root $to_home_root --copy_dir "$uperf_results" --test_name ${test_name} --tuned_setting=$to_tuned_setting --version None --user $to_user
+#
+# $pdir can either be empty or <directory>
+${curdir}/test_tools/save_results --curdir $curdir --home_root $to_home_root --copy_dir "${pdir} ${uperf_results}" --test_name ${test_name} --tuned_setting=$to_tuned_setting --version None --user $to_user
 #
 # We need to use the -x option so we only kill off uperf and not
 # uperf_run also.
