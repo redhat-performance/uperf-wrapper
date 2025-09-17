@@ -107,6 +107,9 @@ usage()
 {
 	echo Usage ${1}:
 	echo "  --client_ips: comma separated list of the client ip addresses"
+
+	echo "  --intervals <x>: creates x+1 intervals from 1 to ncpus."
+	echo "  --max_stddev: standard deviation of the pbench uperf runs"
 	echo "  --networks_to_run: how many networks are we to run."
 	echo "  --numb_jobs: comma separated list of the number of jobs per network to run"
 	echo "  --packet_sizes: comma separated list of packet sizes, (in bytes)"
@@ -453,7 +456,7 @@ execute_test()
 		#	bootc images.
 		#
 		for client in $client_ip_list; do
-			scp xml${net_count} root@$client:/root/xml${net_count} > /dev/null
+			scp -oStrictHostKeyChecking=no xml${net_count} root@$client:/root/xml${net_count} > /dev/null
 			scp  -oStrictHostKeyChecking=no /usr/local/bin/uperf root@$client:/usr/local/bin/uperf
 			ssh_and_check_error $client "chmod 755 /usr/local/bin/uperf"
 			ssh -oStrictHostKeyChecking=no root@$client "/usr/local/bin/uperf -m /root/xml${net_count}" >> $results_file_worker &
@@ -585,6 +588,7 @@ network_list_loop()
 
 ARGUMENT_LIST=(
 	"client_ips"
+	"intervals"
 	"max_stddev"
 	"networks_to_run"
 	"numb_jobs"
@@ -620,6 +624,11 @@ while [[ $# -gt 0 ]]; do
 	case "${1}" in
 		--client_ips)
 			client_ips=$value
+			shift 2
+		;;
+		--intervals)
+			cpus=`nproc`
+			numb_jobs=`$TOOLS_BIN/generate_intervals --max_value $cpus --interval  $2`
 			shift 2
 		;;
 		--max_stddev)
