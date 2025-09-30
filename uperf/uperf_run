@@ -266,7 +266,12 @@ record_data()
 	echo Instance_Count:trans_sec >> iops.csv
 	create_header $1 $2 $3 $4 Bandwidth Gb_sec throughput.csv
 	echo Instance_Count:GB_Sec >> throughput.csv
-	echo "Instance_Count:GB_Sec:trans_sec:lat_usec:test_type:packet_type:packet_size" > $working_dir/results_uperf.csv
+	#
+	# We want to append to the file, not overwrite it.  If we over write the file,
+	# we will lose the prior metadata header as well as prior test information written
+	# to it.
+	#
+	echo "Instance_Count:GB_Sec:trans_sec:lat_usec:test_type:packet_type:packet_size" >> $working_dir/results_uperf.csv
 	#
 	# Now populate the files
 	#
