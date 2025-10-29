@@ -1,0 +1,51 @@
+{
+    "dependencies": {
+        "amzn": [
+            "autoconf",
+            "automake",
+            "git",
+            "gcc",
+            "lksctp-tools-devel",
+            "xorg-x11-xauth",
+            "bc",
+            "zip",
+            "unzip"
+        ],
+        "rhel": [
+            "gcc",
+            "lksctp-tools-devel",
+            "bc",
+            "zip",
+            "unzip",
+            "git"
+        ],
+        "sles": [
+            "autoconf",
+            "automake",
+            "gcc",
+            "lksctp-tools-devel",
+            "lksctp-tools",
+            "make",
+            "numactl",
+            "bc",
+            "git",
+            "unzip",
+            "zip"
+        ],
+        "ubuntu": [
+            "libsctp-dev",
+            "lksctp-tools",
+            "libusrsctp-dev",
+            "autoconf",
+            "dh-autoreconf",
+            "automake",
+            "gcc",
+            "bc",
+            "git",
+            "unzip",
+            "zip"
+        ],
+        "pip": [
+        ]
+    }
+}
