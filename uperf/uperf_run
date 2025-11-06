@@ -199,6 +199,16 @@ fi
 
 ${curdir}/test_tools/gather_data ${curdir}
 source test_tools/general_setup "$@"
+
+#
+# Install packages
+#
+${TOOLS_BIN}/package_tool --wrapper_config ${run_dir}/uperf.json --no_packages $to_no_pkg_install
+if [[ $? -ne 0 ]]; then
+	echo Package installation using ${TOOLS_BIN}/package_tool was unsuccessful.
+	exit 1
+fi
+
 #
 # If running as root, home dir is /
 # This is for uperf only, as we access the remote system as root.
@@ -558,6 +568,21 @@ njobs_loop()
 	done
 }
 
+client_package_install()
+{
+	lc_client=$1
+	tools_dir=`echo ${TOOLS_BIN} | rev | cut -d'/' -f1 | rev`
+	tools_location=`echo ${TOOLS_BIN} | rev | cut -d'/' -f2- | rev`
+	pushd $tools_location > /dev/null
+	if [[ ! -f test_tools.tar ]]; then
+		tar cf test_tools.tar $tools_dir
+	fi
+	scp -oStrictHostKeyChecking=no test_tools.tar root@$lc_client:${to_home_root}/${to_user}/test_tools.tar
+	scp -oStrictHostKeyChecking=no  ${run_dir}/uperf.json  root@$lc_client:${to_home_root}/${to_user}/uperf.json
+	ssh_and_check_error $lc_client "cd ${to_home_root}/${to_user}; tar xf test_tools.tar;${tools_dir}/package_tool --wrapper_config uperf.json --no_packages $to_no_pkg_install"
+	popd > /dev/null
+}
+
 server_ip_loop()
 {
 	for server_ip in $server_ip_list; do
@@ -707,6 +732,13 @@ fi
 client_ip_list=`echo $client_ips | sed "s/,/ /g"`
 server_ip_list=`echo $server_ips | sed "s/,/ /g"`
 number_networks=`echo $server_ip_list | wc -w`
+
+#
+# Install packages on client
+#
+for client in $client_ip_list; do
+	client_package_install $client
+done
 
 #
 # Install epel if RH and then handle locations, else build it.
