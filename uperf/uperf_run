@@ -69,7 +69,6 @@ ssh_and_check_error()
 uperf_version="1.0"
 test_name="uperf"
 rtc=0
-results_file_worker=""
 execution_time=60
 iterations=1
 packet_size="64,16384"
@@ -92,7 +91,6 @@ packet_size_do=""
 numb_jobs_do=""
 networks=""
 networks_using=""
-number_networks=0
 max_stddev=""
 server_ips=""
 client_ips=""
@@ -125,6 +123,7 @@ usage()
 
 uperf_start_remote()
 {
+	port=20000
 	for server in $server_ip_list; do
 		ssh_and_check_error $server "ls /dev > /dev/null"
 		scp -oStrictHostKeyChecking=no ${run_dir}/uperf_build root@$server:${to_home_root}/${to_user}/uperf_build
@@ -137,7 +136,9 @@ uperf_start_remote()
 		echo Firewall Status: $server
 		echo ==================
 		ssh -oStrictHostKeyChecking=no root@$server "systemctl --no-pager status firewalld"
-		ssh -f -oStrictHostKeyChecking=no root@$server "nohup /usr/local/bin/uperf -s &"
+		ssh -f -oStrictHostKeyChecking=no root@$server "nohup /usr/local/bin/uperf -s -P $port  &"
+#		ssh -f -oStrictHostKeyChecking=no root@$server "nohup /usr/local/bin/uperf -s &"
+		let "port=$port+5000"
 	done
 	#
 	# Give it all a chance.
@@ -219,6 +220,8 @@ create_header()
 	numb_nets=$4
 	top_title=$5
 	y_title=$6
+	rate=0
+	ops=0
 
 	echo "test_type: $test_type"
 	echo "packet_type: $packet_type"
@@ -227,31 +230,43 @@ create_header()
 
 record_data()
 {
+	rate=0
+	ops=0
+	latency=0
 	work_file=`mktemp /tmp/uperf_data.XXXXX`
 	for file in `ls`; do
 		results=`grep ^Total $file`
-		echo $file
+		grep ^Total $file > rate
 		protocal=`echo $file | cut -d'_' -f3 | cut -d'=' -f 2`
 		op_type=`echo $file | cut -d'_' -f5 | cut -d'=' -f 2`
 		packet_size=`echo $file | cut -d'_' -f6 | cut -d'=' -f 2`
 		threads=`echo $file | cut -d'_' -f 4 | cut -d'=' -f 2`
 		time=`echo $results | cut -d' ' -f 4`
-		rate=`echo $results | cut -d' ' -f 6`
-		ops=`echo $results | cut -d' ' -f 7`
-		if [[ $rate == *"Mb"* ]]; then
-			rate1=`echo $rate | sed "s/Mb\/s//g"`
-			rate=`echo "scale=2;$rate1/1024" | bc`
-			rate="${rate}Gb/s"
-		fi
-		if [[ $rate == *"K"* ]]; then
-			rate1=`echo $rate | sed "s/Kb\/s//g"`
-			rate=`echo "scale=4;$rate1/1048576" | bc`
-			rate="${rate}Gb/s"
-		fi
-		op1=`echo $ops | sed "s/op\/s//g"`
-		latency=`echo "scale=6;1/${op1}" | bc`
-		echo "${threads}:${time}:$rate:$ops:$latency:${protocal}:${op_type}:${packet_size}" >> $work_file
+			
+		while IFS= read -r value
+		do
+			worker=`echo $value | cut -d' ' -f 6`
+			if [[ $worker == *"Gb/s"* ]]; then
+				temp=`echo $worker | sed 's/Gb\/s//g'`
+			fi
+			if [[ $worker == *"Mb"* ]]; then
+				temp=`echo $worker | sed "s/Mb\/s//g"`
+				temp=`echo "scale=2;$temp/1024" | bc`
+			fi
+			if [[ $worker == *"K"* ]]; then
+				temp=`echo $worker | sed "s/Kb\/s//g"`
+				temp=`echo "scale=4;$rate1/1048576" | bc`
+			fi
+			rate=`echo "scale=2;${temp}+${rate}" | bc`
+			op1=`echo $value | cut -d' ' -f 7 | sed "s/op\/s//g"`
+			ops=`echo "scale=2;$op1+$ops" | bc`
+		done < "rate"
+		latency=`echo "scale=9;1/${ops}" | bc`
+		echo "${threads}:${time}:$rate:$ops:$latency(s):${protocal}:${op_type}:${packet_size}" >> $work_file
 	done
+	pwd > /tmp/dave
+	cat $work_file >> /tmp/dave
+
 	cat $work_file | sort -n > ${work_file}.sorted
 	#
 	# We are now ready to place data in the various graphs
@@ -298,10 +313,10 @@ organize_data()
 	#
 	# First get the op type
 	#
-	test_type=`ls summary_results_* | cut -d'_' -f 3 | sort -u`
-	packet_type=`ls summary_results_* | cut -d'_' -f 5 | sort -u | cut -d'=' -f 2`
-	packet_size=`ls summary_results_* | cut -d'_' -f 6 | sort -u | cut -d'=' -f 2`
-	numb_nets=`ls summary_results_* | cut -d'_' -f 7 | sort -u | cut -d'=' -f 2`
+	test_type=`ls summary_results_* | cut -d'_' -f 3 | sort -u | tail -1`
+	packet_type=`ls summary_results_* | cut -d'_' -f 5 | sort -u | tail -1 | cut -d'=' -f 2`
+	packet_size=`ls summary_results_* | cut -d'_' -f 6 | sort -u | tail -1 | cut -d'=' -f 2`
+	numb_nets=`ls summary_results_* | cut -d'_' -f 7 | sort -u | tail -1 | cut -d'=' -f 2`
 	#
 	# First make the heirchy and cp the appropriate files there.
 	#
@@ -351,59 +366,54 @@ build_xml()
 	local_protocal=$2
 	local_pk_size=$3
 	local_test_host=$4
-	local_instance=$5
+	bx_local_instance=$5
 	local_numb_networks=$6
 	local_iteration=$7
 	local_test_type=$8
 	local_test_iteration=$9
 
-	echo "<?xml version=\"1.0\"?>"  > xml${local_instance}
-	echo "<profile name=\"${local_test_type}-${local_pk_size}B-${local_nthr}i\">" >> xml${local_instance}
-	echo "  <group nthreads=\"${1}\">" >> xml${local_instance}
+	echo "<?xml version=\"1.0\"?>"  > xml${bx_local_instance}
+	echo "<profile name=\"${local_test_type}-${local_pk_size}B-${local_nthr}i\">" >> xml${bx_local_instance}
+	echo "  <group nthreads=\"${1}\">" >> xml${bx_local_instance}
 	case $local_test_type in
 		rr)
-			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
-			echo "      <flowop type=\"connect\" options=\"remotehost=${local_test_host} protocol=${local_protocal}\"/>" >> xml${local_instance}
-			echo "    </transaction>" >> xml${local_instance}
-			echo "    <transaction duration=\"${execution_time}s\">" >> xml${local_instance}
-			echo "      <flowop type=\"write\" options=\"count=${local_nthr} size=${local_pk_size}\"/>" >> xml${local_instance}
-			echo "      <flowop type=\"read\"  options=\"size=${local_pk_size}\"/>" >> xml${local_instance}
-			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
-			echo "      <flowop type=\"disconnect\" />" >> xml${local_instance}
-			echo "    </transaction>" >> xml${local_instance}
+			echo "    <transaction iterations=\"1\">" >> xml${bx_local_instance}
+			echo "      <flowop type=\"connect\" options=\"remotehost=${local_test_host} protocol=${local_protocal}\"/>" >> xml${bx_local_instance}
+			echo "    </transaction>" >> xml${bx_local_instance}
+			echo "    <transaction duration=\"${execution_time}s\">" >> xml${bx_local_instance}
+			echo "      <flowop type=\"write\" options=\"count=${local_nthr} size=${local_pk_size}\"/>" >> xml${bx_local_instance}
+			echo "      <flowop type=\"read\"  options=\"size=${local_pk_size}\"/>" >> xml${bx_local_instance}
+			echo "    <transaction iterations=\"1\">" >> xml${bx_local_instance}
+			echo "      <flowop type=\"disconnect\" />" >> xml${bx_local_instance}
+			echo "    </transaction>" >> xml${bx_local_instance}
 		;;
 		stream|bidirec)
-			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
-			echo "      <flowop type=\"connect\" options=\"remotehost=${local_test_host} protocol=${local_protocal}\"/>" >> xml${local_instance}
-			echo "    </transaction>" >> xml${local_instance}
-			echo "    <transaction duration=\"${execution_time}s\">" >> xml${local_instance}
-			echo "      <flowop type=\"write\" options=\"count=${local_nthr} size=${local_pk_size}\"/>" >> xml${local_instance}
-			echo "    </transaction>" >> xml${local_instance}
-			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
-			echo "      <flowop type=\"disconnect\" />" >> xml${local_instance}
-			echo "    </transaction>" >> xml${local_instance}
+			echo "    <transaction iterations=\"1\">" >> xml${bx_local_instance}
+			echo "      <flowop type=\"connect\" options=\"remotehost=${local_test_host} protocol=${local_protocal}\"/>" >> xml${bx_local_instance}
+			echo "    </transaction>" >> xml${bx_local_instance}
+			echo "    <transaction duration=\"${execution_time}s\">" >> xml${bx_local_instance}
+			echo "      <flowop type=\"write\" options=\"count=${local_nthr} size=${local_pk_size}\"/>" >> xml${bx_local_instance}
+			echo "    </transaction>" >> xml${bx_local_instance}
+			echo "    <transaction iterations=\"1\">" >> xml${bx_local_instance}
+			echo "      <flowop type=\"disconnect\" />" >> xml${bx_local_instance}
+			echo "    </transaction>" >> xml${bx_local_instance}
 			;;
 		maerts|bidirec)
-			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
-			echo "      <flowop type=\"accept\" options=\"remotehost=${local_test_host} protocol=${local_protocal}\"/>" >> xml${local_instance}
-			echo "    </transaction>" >> xml${local_instance}
-			echo "    <transaction duration=\"${execution_time}s\">" >> xml${local_instance}
-			echo "      <flowop type=\"read\" options=\"${local_nthr} size=${local_pk_size}\"/>" >> xml${local_instance}
-			echo "    </transaction>" >> xml${local_instance}
-			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
-			echo "      <flowop type=\"disconnect\" />" >> xml${local_instance}
-			echo "    </transaction>" >> xml${local_instance}
+			echo "    <transaction iterations=\"1\">" >> xml${bx_local_instance}
+			echo "      <flowop type=\"accept\" options=\"remotehost=${local_test_host} protocol=${local_protocal}\"/>" >> xml${bx_local_instance}
+			echo "    </transaction>" >> xml${bx_local_instance}
+			echo "    <transaction duration=\"${execution_time}s\">" >> xml${bx_local_instance}
+			echo "      <flowop type=\"read\" options=\"${local_nthr} size=${local_pk_size}\"/>" >> xml${bx_local_instance}
+			echo "    </transaction>" >> xml${bx_local_instance}
+			echo "    <transaction iterations=\"1\">" >> xml${bx_local_instance}
+			echo "      <flowop type=\"disconnect\" />" >> xml${bx_local_instance}
+			echo "    </transaction>" >> xml${bx_local_instance}
 			;;
 	esac
-	echo "  </group>" >> xml${local_instance}
-	echo "</profile>" >> xml${local_instance}
+	echo "  </group>" >> xml${bx_local_instance}
+	echo "</profile>" >> xml${bx_local_instance}
 
-	results_file="results_${local_test_type}_nj=${local_nthr}_pt=${local_protocal}_ps=${local_pk_size}_nets=${local_numb_networks}_iteration=${local_test_iteration}"
-	if [ ${local_instance} -eq 1 ]; then
-		results_file_worker="${results_file}_itera=${local_iteration}.${local_instance}_${results_suffix}"
-	else
-		results_file_worker="debug_${results_file}_itera=${local_iteration}.${local_instance}_${results_suffix}"
-	fi
+	results_file=results_${local_test_type}_nj=${local_nthr}_pt=${local_protocal}_ps=${local_pk_size}_nets=${local_numb_networks}_iteration=${local_test_iteration}
 }
 
 install_uperf()
@@ -439,18 +449,23 @@ execute_test()
 	timestamp=`date +%u%t%T`
 	pindex=0
 
+	port=20000
 	if [[ $to_use_pcp -eq 1 ]]; then
 		start_pcp_subset
 	fi
-	for nets in $networks;do
-		build_xml "${njobs}" "${packet_type}" "${packet_size}" "${nets}" "${net_count}" "${network_count}" "1" "${test_case}" "${test_iteration}"
+	net_count=1
+	network_count=1
+	for nets in $individ_pairs; do
+		server_ip=`echo $nets | cut -d':' -f1`
+		client_ip=`echo $nets | cut -d':' -f2`
+		build_xml "${njobs}" "${packet_type}" "${packet_size}" "${server_ip}" "${net_count}" "${network_count}" "1" "${test_case}" "${test_iteration}"
 		if [ $? -ne 0 ]; then
 			error_out "Failed: build_xml" 1
 		fi
-		echo "# Time period: $timestamp" > $results_file_worker
-		echo "/usr/local/bin/uperf -m xml${net_count} >> $results_file_worker"
+		echo "# Time period: $timestamp" > $results_file_${net_count}
+		echo "/usr/local/bin/uperf -m xml${net_count} >> ${results_file}_${net_count}"
 		if [ $net_count -eq 1 ]; then
-			net_file=${uperf_results}/${results_file_worker}_stats
+			net_file=${uperf_results}/${results_file}_stats
 			for nets in ${network_list}; do
 				ethtool -S ${nets} > ${uperf_results}/net_stats_${nets}_iter_${test_iteration}.before
 			done
@@ -460,12 +475,15 @@ execute_test()
 		#	time but we might have to use /var/roothome if using
 		#	bootc images.
 		#
-		for client in $client_ip_list; do
+		for client in $client_ip; do
 			scp -oStrictHostKeyChecking=no xml${net_count} root@$client:/root/xml${net_count} > /dev/null
 			scp  -oStrictHostKeyChecking=no /usr/local/bin/uperf root@$client:/usr/local/bin/uperf
 			ssh_and_check_error $client "chmod 755 /usr/local/bin/uperf"
-			ssh -oStrictHostKeyChecking=no root@$client "/usr/local/bin/uperf -m /root/xml${net_count}" >> $results_file_worker &
+			pwd >> /tmp/dave
+			echo ${results_file}_${net_count} >> /tmp/dave
+			ssh -oStrictHostKeyChecking=no root@$client "/usr/local/bin/uperf -m /root/xml${net_count} -P $port" >> ${results_file}_${net_count} &
 			pids[${pindex}]=$!
+			let "port=$port+5000"
 			let "pindex=$pindex+1"
 		done 
 		let "net_count=$net_count+1"
@@ -500,7 +518,7 @@ execute_test()
 	else
 		echo Ran >> ${uperf_results}/test_results_report
 	fi
-	cp ${results_file} ${uperf_results}
+	cp ${results_file}* ${uperf_results}
 	rm -f "${results_file}"*
 	rm -f debug*
 	rm -f xml*
@@ -523,8 +541,8 @@ test_iteration_loop()
 		# We need to use the -x option so we only kill off uperf and not
 		# uperf_run also.
 		#
-		for client_ip in $server_ip_list; do
-			ssh -oStrictHostKeyChecking=no $client_ip "pkill -x -9 uperf"
+		for server_ip in $server_ip_list; do
+			ssh -oStrictHostKeyChecking=no $server_ip "pkill -x -9 uperf"
 		done
 		#
 		# Restart uperf on the remote systems.
@@ -560,46 +578,22 @@ njobs_loop()
 
 server_ip_loop()
 {
-	for server_ip in $server_ip_list; do
-		if [[ -z $networks ]]; then
-			networks=$server_ip
-			network_count=1
-		else
-			networks+=" "$server_ip
-			let "network_count=$network_count+1"
-		fi
-		if [ $network_count -lt $number_networks ]; then
-			continue
-		fi
-		if [ $network_count -gt $number_networks ]; then
-			network_done=1;
-		fi
-		if [ $network_done -eq 1 ]; then
-			break
-		fi
-		njobs_loop
-	done
+	njobs_loop
 }
 
 network_list_loop()
 {
-	for networks_using in $network_list; do
-		if [ $network_done -eq 1 ]; then
-			break
-		fi
-		server_ip_loop
-	done
+	server_ip_loop
 }
 
 ARGUMENT_LIST=(
-	"client_ips"
+	"client_server_ip_pairs"
 	"intervals"
 	"max_stddev"
 	"networks_to_run"
 	"numb_jobs"
 	"packet_sizes"
 	"packet_type"
-	"server_ips"
 	"suffix"
 	"tests"
 	"time"
@@ -627,8 +621,8 @@ eval set --$opts
 while [[ $# -gt 0 ]]; do
 	value=`echo $2 | sed "s/}//g"`
 	case "${1}" in
-		--client_ips)
-			client_ips=$value
+		--client_server_ip_pairs)
+			client_server_ip_pairs=$value
 			shift 2
 		;;
 		--intervals)
@@ -654,10 +648,6 @@ while [[ $# -gt 0 ]]; do
 		;;
 		--packet_type)
 			packet_type=$value
-			shift 2
-		;;
-		--server_ips)
-			server_ips=$value
 			shift 2
 		;;
 		--suffix)
@@ -692,21 +682,29 @@ while [[ $# -gt 0 ]]; do
 done
 shift $((OPTIND-1))
 
-if [[ $client_ips == "" ]]; then
-	echo Please designate the client ips
-	read client_ips
-fi
-if [[ $server_ips == "" ]]; then
-	echo Please designate the server ips
-	read server_ips
+if [[ $client_server_ip_pairs == "" ]]; then
+	echo Please designate the client:server IP pairs
+	read client_server_ip_pairs
 fi
 if [[ $to_use_pcp -eq 1 ]]; then
 	pdir=/tmp/pcp_`date "+%Y.%m.%d-%H.%M.%S"`
 fi
 
-client_ip_list=`echo $client_ips | sed "s/,/ /g"`
-server_ip_list=`echo $server_ips | sed "s/,/ /g"`
-number_networks=`echo $server_ip_list | wc -w`
+individ_pairs=`echo $client_server_ip_pairs | sed "s/,/ /g"`
+for pair in `echo $individ_pairs | sed "s/,/ /g"`; do
+	server_ip=`echo $pair | cut -d':' -f1`
+	client_ip=`echo $pair | cut -d':' -f2`
+	if [[ $server_ip_list == "" ]]; then
+		server_ip_list="$server_ip"
+	else
+		server_ip_list="$server_ip_list $server_ip"
+	fi
+	if [[ $client_ip_list == "" ]]; then
+		client_ip_list="$client_ip"
+	else
+		client_ip_list="$client_ip_list $client_ip"
+	fi
+done
 
 #
 # Install epel if RH and then handle locations, else build it.
@@ -727,6 +725,7 @@ packet_size_do=`echo $packet_size | sed 's/,/ /g'`
 numb_jobs_do=`echo $numb_jobs | sed 's/,/ /g'`
 test_types=`echo $tests | sed 's/,/ /g'`
 networks=""
+networks_to_run=1
 network_count=0
 
 network_list=`echo $networks_to_run | sed 's/,/ /g'`
@@ -763,8 +762,8 @@ ${curdir}/test_tools/save_results --curdir $curdir --home_root $to_home_root --c
 # We need to use the -x option so we only kill off uperf and not
 # uperf_run also.
 #
-for client in $server_ip_list; do
-	ssh -oStrictHostKeyChecking=no root@$client "pkill -x -9 uperf"
+for server_ip in $server_ip_list; do
+	ssh -oStrictHostKeyChecking=no root@$server_ip "pkill -x -9 uperf"
 done
 #
 # Give things a chance to clean up.
