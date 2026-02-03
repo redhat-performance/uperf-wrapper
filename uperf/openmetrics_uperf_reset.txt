@@ -13,6 +13,6 @@ tcp_packet NaN
 udp_packet NaN
 packet_size NaN
 number_procs NaN
-GB_Sec NaN
+Gb_Sec NaN
 trans_sec NaN
 lat_usec NaN

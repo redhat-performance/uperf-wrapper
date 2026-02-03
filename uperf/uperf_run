@@ -275,7 +275,7 @@ record_data()
 	# We are now ready to place data in the various graphs
 	#
 	# Graphs to do:
-	# latency, trans/sec and GB/sec.  Note we do not filter out the
+	# latency, trans/sec and Gb/sec.  Note we do not filter out the
 	# graphs, that is left for the user to d.
 	#
 	create_header $1 $2 $3 $4 Latency usec latency.csv
@@ -283,13 +283,13 @@ record_data()
 	create_header $1 $2 $3 $4 Transaction/second trans_sec iops.csv
 #	echo number_procs,trans_sec,Start_Date,End_Date >> iops.csv
 	create_header $1 $2 $3 $4 Bandwidth Gb_sec throughput.csv
-#	echo number_procs,GB_Sec,Start_Date,End_Date >> throughput.csv
+#	echo number_procs,Gb_Sec,Start_Date,End_Date >> throughput.csv
 	#
 	# We want to append to the file, not overwrite it.  If we over write the file,
 	# we will lose the prior metadata header as well as prior test information written
 	# to it.
 	#
-	echo "number_procs,GB_Sec,trans_sec,lat_usec,test_type,packet_type,packet_size,Start_Date,End_Date" >> $working_dir/results_uperf.csv
+	echo "number_procs,Gb_Sec,trans_sec,lat_usec,test_type,packet_type,packet_size,Start_Date,End_Date" >> $working_dir/results_uperf.csv
 	#
 	# Now populate the files
 	#
@@ -476,7 +476,7 @@ report_pcp_values()
 		rate=`echo "scale=4;$rate1/1048576" | bc`
 	fi
 	latency=`echo "scale=6;1/${op1}" | bc`
-	results2pcp_add_value "GB_Sec:$rate"
+	results2pcp_add_value "Gb_Sec:$rate"
 	results2pcp_add_value "trans_sec:${ops_sec}"
 	latency=`echo "scale=6;1/${ops_sec}" | bc`
 	results2pcp_add_value "lat_usec:$latency"
