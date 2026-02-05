@@ -23,6 +23,7 @@
 #
 arguments="$@"
 pdir=""
+test_iteration=0
 
 if [ ! -f "uperf.out" ]; then
         command="${0} ${@}"
@@ -199,6 +200,7 @@ fi
 
 ${curdir}/test_tools/gather_data ${curdir}
 source test_tools/general_setup "$@"
+source $TOOLS_BIN/helpers.inc
 
 #
 # Install packages
@@ -226,13 +228,16 @@ create_header()
 	test_type=$1
 	packet_type=$2
 	packet_size=$3
-	numb_nets=$4
+	num_nets=$4
 	top_title=$5
 	y_title=$6
+	out_file=$7
 
 	echo "test_type: $test_type"
 	echo "packet_type: $packet_type"
 	echo "packet_size: $packet_size"
+#	create_header $1 $2 $3 $4 Latency usec latency.csv
+	echo number_procs,"${top_title}"_"${y_title}",test,packet,packet_size,Start_Date,End_Date >> $out_file
 }
 
 record_data()
@@ -240,8 +245,10 @@ record_data()
 	work_file=`mktemp /tmp/uperf_data.XXXXX`
 	for file in `ls`; do
 		results=`grep ^Total $file`
+		start_time=`grep ^Start_time $file | awk '{print $2}'`
+		end_time=`grep ^End_time  $file | awk '{print $2}'`
 		echo $file
-		protocal=`echo $file | cut -d'_' -f3 | cut -d'=' -f 2`
+		protocol=`echo $file | cut -d'_' -f3 | cut -d'=' -f 2`
 		op_type=`echo $file | cut -d'_' -f5 | cut -d'=' -f 2`
 		packet_size=`echo $file | cut -d'_' -f6 | cut -d'=' -f 2`
 		threads=`echo $file | cut -d'_' -f 4 | cut -d'=' -f 2`
@@ -260,45 +267,55 @@ record_data()
 		fi
 		op1=`echo $ops | sed "s/op\/s//g"`
 		latency=`echo "scale=6;1/${op1}" | bc`
-		echo "${threads}:${time}:$rate:$ops:$latency:${protocal}:${op_type}:${packet_size}" >> $work_file
+		
+		echo "${threads},${time},$rate,$ops,$latency,${protocol},${op_type},${packet_size},${start_time},${end_time}" >> $work_file
 	done
 	cat $work_file | sort -n > ${work_file}.sorted
 	#
 	# We are now ready to place data in the various graphs
 	#
 	# Graphs to do:
-	# latency, trans/sec and GB/sec.  Note we do not filter out the
+	# latency, trans/sec and Gb/sec.  Note we do not filter out the
 	# graphs, that is left for the user to d.
 	#
 	create_header $1 $2 $3 $4 Latency usec latency.csv
-	echo Instance_Count:usec >> latency.csv
-	create_header $1 $2 $3 $4 Transaction/second trans_sec iops.csv
-	echo Instance_Count:trans_sec >> iops.csv
+#	echo number_procs,usec,Start_Date,End_Date >> latency.csv
+	create_header $1 $2 $3 $4 Transaction/second trans_sec pps.csv
+#	echo number_procs,trans_sec,Start_Date,End_Date >> pps.csv
 	create_header $1 $2 $3 $4 Bandwidth Gb_sec throughput.csv
-	echo Instance_Count:GB_Sec >> throughput.csv
+#	echo number_procs,Gb_Sec,Start_Date,End_Date >> throughput.csv
 	#
 	# We want to append to the file, not overwrite it.  If we over write the file,
 	# we will lose the prior metadata header as well as prior test information written
 	# to it.
 	#
-	echo "Instance_Count:GB_Sec:trans_sec:lat_usec:test_type:packet_type:packet_size" >> $working_dir/results_uperf.csv
+	echo "number_procs,Gb_Sec,trans_sec,lat_usec,test_type,packet_type,packet_size,Start_Date,End_Date" >> $working_dir/results_uperf.csv
 	#
 	# Now populate the files
 	#
 	while IFS= read -r line
 	do
-		threads=`echo $line | cut -d: -f 1`
-		bw=`echo $line | cut -d: -f 3 | sed "s/Gb\/s//g"`
-		rest=`echo $line | cut -d: -f 6-8`
-		iops=`echo $line | cut -d: -f 4 | sed "s/op\/s//g"`
-		lat=`echo $line | cut -d: -f 5`
-		echo $threads:$bw:$rest >> throughput.csv
-		echo $threads:$iops:$rest >> iops.csv
-		echo $threads:$lat:$rest >> latency.csv
-		echo $threads:$bw:$iops:$lat:$rest >> $working_dir/results_uperf.csv
+		threads=`echo $line | cut -d, -f 1`
+		bw=`echo $line | cut -d, -f 3 | sed "s/Gb\/s//g"`
+		f6=`echo $line | cut -d, -f 6`
+		f7=`echo $line | cut -d, -f 7`
+		f8=`echo $line | cut -d, -f 8`
+		start_time=`echo $line | cut -d, -f 9`
+		end_time=`echo $line | cut -d, -f 10`
+		pps=`echo $line | cut -d, -f 4 | sed "s/op\/s//g"`
+		lat=`echo $line | cut -d, -f 5`
+		out_string=$(build_data_string  "${threads}" "${bw}" "${f6}" "${f7}' ${f8}" "${start_time}" "${end_time}")
+		echo $out_string >> throughput.csv
+		out_string=$(build_data_string  "${threads}" "${pps}" "$rest}" "${start_time}" "${end_time}")
+		echo $out_string >> pps.csv
+		out_string=$(build_data_string  "${threads}" "${lat}" "${rest}" "${start_time}" "${end_time}")
+		echo $out_string >> lat.csv
+		out_string=$(build_data_string  "${threads}" "${bw}" "${pps}" "${lat}" "${f6}" "${f7}" "${f8}" "${start_time}" "${end_time}")
+		echo $out_string >> $working_dir/results_uperf.csv
 	done < "${work_file}.sorted"
+	cat $working_dir/results_uperf.csv
 	echo "" >> throughput.csv
-	echo "" >> iops.csv
+	echo "" >> pps.csv
 	echo "" >> latency.csv
 	rm ${work_file}*
 }
@@ -311,7 +328,7 @@ organize_data()
 	test_type=`ls summary_results_* | cut -d'_' -f 3 | sort -u`
 	packet_type=`ls summary_results_* | cut -d'_' -f 5 | sort -u | cut -d'=' -f 2`
 	packet_size=`ls summary_results_* | cut -d'_' -f 6 | sort -u | cut -d'=' -f 2`
-	numb_nets=`ls summary_results_* | cut -d'_' -f 7 | sort -u | cut -d'=' -f 2`
+	num_nets=`ls summary_results_* | cut -d'_' -f 7 | sort -u | cut -d'=' -f 2`
 	#
 	# First make the heirchy and cp the appropriate files there.
 	#
@@ -321,7 +338,7 @@ organize_data()
 	for tt in $test_type; do
 		for pt in $packet_type; do
 			for ps in $packet_size; do
-				for nn in $numb_nets; do
+				for nn in $num_nets; do
 					mkdir -p net_results/${tt}/${pt}/${ps}/${nn}
 					cp summary_results_${tt}*pt=${pt}_ps=${ps}_nets=${nn}_iteration* net_results/${tt}/${pt}/${ps}/${nn}
 				done
@@ -358,7 +375,7 @@ organize_data()
 build_xml()
 {
 	local_nthr=$1
-	local_protocal=$2
+	local_protocol=$2
 	local_pk_size=$3
 	local_test_host=$4
 	local_instance=$5
@@ -373,7 +390,7 @@ build_xml()
 	case $local_test_type in
 		rr)
 			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
-			echo "      <flowop type=\"connect\" options=\"remotehost=${local_test_host} protocol=${local_protocal}\"/>" >> xml${local_instance}
+			echo "      <flowop type=\"connect\" options=\"remotehost=${local_test_host} protocol=${local_protocol}\"/>" >> xml${local_instance}
 			echo "    </transaction>" >> xml${local_instance}
 			echo "    <transaction duration=\"${execution_time}s\">" >> xml${local_instance}
 			echo "      <flowop type=\"write\" options=\"count=${local_nthr} size=${local_pk_size}\"/>" >> xml${local_instance}
@@ -384,7 +401,7 @@ build_xml()
 		;;
 		stream|bidirec)
 			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
-			echo "      <flowop type=\"connect\" options=\"remotehost=${local_test_host} protocol=${local_protocal}\"/>" >> xml${local_instance}
+			echo "      <flowop type=\"connect\" options=\"remotehost=${local_test_host} protocol=${local_protocol}\"/>" >> xml${local_instance}
 			echo "    </transaction>" >> xml${local_instance}
 			echo "    <transaction duration=\"${execution_time}s\">" >> xml${local_instance}
 			echo "      <flowop type=\"write\" options=\"count=${local_nthr} size=${local_pk_size}\"/>" >> xml${local_instance}
@@ -395,7 +412,7 @@ build_xml()
 			;;
 		maerts|bidirec)
 			echo "    <transaction iterations=\"1\">" >> xml${local_instance}
-			echo "      <flowop type=\"accept\" options=\"remotehost=${local_test_host} protocol=${local_protocal}\"/>" >> xml${local_instance}
+			echo "      <flowop type=\"accept\" options=\"remotehost=${local_test_host} protocol=${local_protocol}\"/>" >> xml${local_instance}
 			echo "    </transaction>" >> xml${local_instance}
 			echo "    <transaction duration=\"${execution_time}s\">" >> xml${local_instance}
 			echo "      <flowop type=\"read\" options=\"${local_nthr} size=${local_pk_size}\"/>" >> xml${local_instance}
@@ -408,7 +425,7 @@ build_xml()
 	echo "  </group>" >> xml${local_instance}
 	echo "</profile>" >> xml${local_instance}
 
-	results_file="results_${local_test_type}_nj=${local_nthr}_pt=${local_protocal}_ps=${local_pk_size}_nets=${local_numb_networks}_iteration=${local_test_iteration}"
+	results_file="results_${local_test_type}_nj=${local_nthr}_pt=${local_protocol}_ps=${local_pk_size}_nets=${local_numb_networks}_iteration=${local_test_iteration}"
 	if [ ${local_instance} -eq 1 ]; then
 		results_file_worker="${results_file}_itera=${local_iteration}.${local_instance}_${results_suffix}"
 	else
@@ -439,6 +456,33 @@ install_uperf()
 	fi
 	cd
 }
+report_pcp_values()
+{
+	results=`grep ^Total $1`
+	file=`echo "${1}" | rev | cut -d'/' -f1 | rev`
+	protocol=`echo $file | cut -d'_' -f3 | cut -d'=' -f 2`
+	op_type=`echo $file | cut -d'_' -f5 | cut -d'=' -f 2`
+	packet_size=`echo $file | cut -d'_' -f6 | cut -d'=' -f 2`
+	threads=`echo $file | cut -d'_' -f 4 | cut -d'=' -f 2`
+	time=`echo $results | cut -d' ' -f 4 | cut -d'(' -f 1`
+	rate=`echo $results | cut -d' ' -f 6 | sed "s/Gb\/s//g"`
+	ops_sec=`echo $results | cut -d' ' -f 7 | sed "s/op\/s//g"`
+	if [[ $rate == *"Mb"* ]]; then
+		rate1=`echo $rate | sed "s/Mb\/s//g"`
+		rate=`echo "scale=2;$rate1/1024" | bc`
+	fi
+	if [[ $rate == *"K"* ]]; then
+		rate1=`echo $rate | sed "s/Kb\/s//g"`
+		rate=`echo "scale=4;$rate1/1048576" | bc`
+	fi
+	latency=`echo "scale=6;1/${op1}" | bc`
+	results2pcp_add_value "Gb_Sec:$rate"
+	results2pcp_add_value "trans_sec:${ops_sec}"
+	latency=`echo "scale=6;1/${ops_sec}" | bc`
+	results2pcp_add_value "lat_usec:$latency"
+	results2pcp_add_value_commit
+	reset_pcp_om
+}
 
 execute_test()
 {
@@ -449,10 +493,29 @@ execute_test()
 	timestamp=`date +%u%t%T`
 	pindex=0
 
-	if [[ $to_use_pcp -eq 1 ]]; then
-		start_pcp_subset
-	fi
 	for nets in $networks;do
+		if [[ $to_use_pcp -eq 1 ]]; then
+			start_pcp_subset
+			results2pcp_add_value "iteration:${test_iteration}"
+			results2pcp_add_value "number_procs:${njobs}"
+			if [[ $test_case == "stream" ]]; then
+				results2pcp_add_value "streams_test:1"
+			elif [[ $test_case == "rr" ]]; then
+				results2pcp_add_value "rr_test:1"
+			elif [[ $test_case == "bidirec" ]]; then
+				results2pcp_add_value "biderec_test:1"
+			else
+				results2pcp_add_value "maert_tests:1"
+			fi
+			results2pcp_add_value "num_networks:${net_count}"
+			if [[ $packet_type == "tcp" ]]; then
+				results2pcp_add_value "is_tcp:1"
+			else
+				results2pcp_add_value "is_udp:1"
+			fi
+			results2pcp_add_value "packet_size:$packet_size"
+			results2pcp_add_value_commit
+		fi
 		build_xml "${njobs}" "${packet_type}" "${packet_size}" "${nets}" "${net_count}" "${network_count}" "1" "${test_case}" "${test_iteration}"
 		if [ $? -ne 0 ]; then
 			error_out "Failed: build_xml" 1
@@ -470,6 +533,7 @@ execute_test()
 		#	time but we might have to use /var/roothome if using
 		#	bootc images.
 		#
+		start_time=$(retrieve_time_stamp)
 		for client in $client_ip_list; do
 			scp -oStrictHostKeyChecking=no xml${net_count} root@$client:/root/xml${net_count} > /dev/null
 			scp  -oStrictHostKeyChecking=no /usr/local/bin/uperf root@$client:/usr/local/bin/uperf
@@ -484,19 +548,23 @@ execute_test()
 	for pid in ${pids[*]}; do
 		wait $pid
 	done
-	if [[ $to_use_pcp -eq 1 ]]; then
-		echo "Send result to PCP archive"
-		out="network_iter_${test_iters}"
-		result2pcp iteration_${test_iteration} ${out}
-		stop_pcp_subset
-	fi
+	end_time=$(retrieve_time_stamp)
 	for nets in ${network_list}; do
 		ethtool -S ${nets} > ${uperf_results}/net_stats_${nets}_iter_${test_iteration}.after
 	done
 	#
 	# Collapse results files now
 	#
+	echo "Start_time ${start_time}" >> ${uperf_results}/summary_${results_file}_${results_suffix}
+	echo "End_time ${end_time}" >> ${uperf_results}/summary_${results_file}_${results_suffix}
 	cat "${results_file}"*  >> ${uperf_results}/summary_${results_file}_${results_suffix}
+	if [[ $to_use_pcp -eq 1 ]]; then
+		report_pcp_values ${uperf_results}/summary_${results_file}_${results_suffix}
+#		echo "Send result to PCP archive"
+#		out="network_iter_${test_iters}"
+#		result2pcp iteration_${test_iteration} ${out}
+		stop_pcp_subset
+	fi
 	#
 	# Report failures
 	#
@@ -780,6 +848,7 @@ for test_case in $test_types; do
 	network_list_loop
 done
 if [[ $to_use_pcp -eq 1 ]]; then
+	stop_pcp
 	shutdown_pcp
 fi
 
