@@ -25,6 +25,8 @@ arguments="$@"
 pdir=""
 test_iteration=0
 
+script_dir=$(realpath $(dirname $0))
+rtc=0
 if [ ! -f "uperf.out" ]; then
         command="${0} ${@}"
         echo $command
@@ -198,8 +200,18 @@ if [ ! -d "test_tools" ]; then
 	fi
 fi
 
-${curdir}/test_tools/gather_data ${curdir}
-source test_tools/general_setup "$@"
+TOOLS_BIN="${HOME}/test_tools"
+export TOOLS_BIN
+if [ ! -d "${TOOLS_BIN}" ]; then
+	git clone $tools_git ${TOOLS_BIN}
+	if [ $? -ne 0 ]; then
+		echo pulling git $tools_git failed.
+		exit 1
+	fi
+fi
+
+${TOOLS_BIN}/gather_data ${curdir}
+source ${TOOLS_BIN}/general_setup "$@"
 source $TOOLS_BIN/helpers.inc
 
 #
@@ -233,10 +245,6 @@ create_header()
 	y_title=$6
 	out_file=$7
 
-	echo "test_type: $test_type"
-	echo "packet_type: $packet_type"
-	echo "packet_size: $packet_size"
-#	create_header $1 $2 $3 $4 Latency usec latency.csv
 	echo number_procs,"${top_title}"_"${y_title}",test,packet,packet_size,Start_Date,End_Date >> $out_file
 }
 
@@ -247,7 +255,6 @@ record_data()
 		results=`grep ^Total $file`
 		start_time=`grep ^Start_time $file | awk '{print $2}'`
 		end_time=`grep ^End_time  $file | awk '{print $2}'`
-		echo $file
 		protocol=`echo $file | cut -d'_' -f3 | cut -d'=' -f 2`
 		op_type=`echo $file | cut -d'_' -f5 | cut -d'=' -f 2`
 		packet_size=`echo $file | cut -d'_' -f6 | cut -d'=' -f 2`
@@ -278,12 +285,9 @@ record_data()
 	# latency, trans/sec and Gb/sec.  Note we do not filter out the
 	# graphs, that is left for the user to d.
 	#
-	create_header $1 $2 $3 $4 Latency usec latency.csv
-#	echo number_procs,usec,Start_Date,End_Date >> latency.csv
-	create_header $1 $2 $3 $4 Transaction/second trans_sec pps.csv
-#	echo number_procs,trans_sec,Start_Date,End_Date >> pps.csv
+	create_header $1 $2 $3 $4 Latency usec lat.csv
+	create_header $1 $2 $3 $4 trans sec  pps.csv
 	create_header $1 $2 $3 $4 Bandwidth Gb_sec throughput.csv
-#	echo number_procs,Gb_Sec,Start_Date,End_Date >> throughput.csv
 	#
 	# We want to append to the file, not overwrite it.  If we over write the file,
 	# we will lose the prior metadata header as well as prior test information written
@@ -304,19 +308,33 @@ record_data()
 		end_time=`echo $line | cut -d, -f 10`
 		pps=`echo $line | cut -d, -f 4 | sed "s/op\/s//g"`
 		lat=`echo $line | cut -d, -f 5`
-		out_string=$(build_data_string  "${threads}" "${bw}" "${f6}" "${f7}' ${f8}" "${start_time}" "${end_time}")
+		out_string=$(build_data_string  "${threads}" "${bw}" "${f6}" "${f7}" "${f8}" "${start_time}" "${end_time}")
 		echo $out_string >> throughput.csv
-		out_string=$(build_data_string  "${threads}" "${pps}" "$rest}" "${start_time}" "${end_time}")
+		out_string=$(build_data_string  "${threads}" "${pps}" "${f6}" "${f7}" "${f8}" "${start_time}" "${end_time}")
 		echo $out_string >> pps.csv
-		out_string=$(build_data_string  "${threads}" "${lat}" "${rest}" "${start_time}" "${end_time}")
+		out_string=$(build_data_string  "${threads}" "${lat}" "${f6}" "${f7}" "${f8}" "${start_time}" "${end_time}")
 		echo $out_string >> lat.csv
 		out_string=$(build_data_string  "${threads}" "${bw}" "${pps}" "${lat}" "${f6}" "${f7}" "${f8}" "${start_time}" "${end_time}")
 		echo $out_string >> $working_dir/results_uperf.csv
 	done < "${work_file}.sorted"
-	cat $working_dir/results_uperf.csv
+	for i in `ls *csv`; do
+		schema=`echo $i | cut -d'.' -f1`
+		if [[ ! -f $script_dir/schemas/$schema ]]; then
+			echo Warning: Did not find schema for $schema
+			continue
+		fi
+		cp $script_dir/schemas/$schema $script_dir/results_schema.py
+		${TOOLS_BIN}/csv_to_json $to_json_flags --csv_file ${i} --output_file results_uperf.json
+		${TOOLS_BIN}/verify_results $to_verify_flags --schema_file $script_dir/results_schema.py --class_name Uperf_Results --file results_uperf.json
+	
+		if [[ $? -ne 0 ]]; then
+			echo Failure in `pwd`/$i
+			rtc=1
+		fi
+	done
 	echo "" >> throughput.csv
 	echo "" >> pps.csv
-	echo "" >> latency.csv
+	echo "" >> lat.csv
 	rm ${work_file}*
 }
 
@@ -560,9 +578,6 @@ execute_test()
 	cat "${results_file}"*  >> ${uperf_results}/summary_${results_file}_${results_suffix}
 	if [[ $to_use_pcp -eq 1 ]]; then
 		report_pcp_values ${uperf_results}/summary_${results_file}_${results_suffix}
-#		echo "Send result to PCP archive"
-#		out="network_iter_${test_iters}"
-#		result2pcp iteration_${test_iteration} ${out}
 		stop_pcp_subset
 	fi
 	#
@@ -855,11 +870,11 @@ fi
 pushd $uperf_results
 organize_data
 popd
-${curdir}/test_tools/move_data $curdir $uperf_results
+${TOOLS_BIN}/move_data $curdir $uperf_results
 cp ${curdir}/uperf.out $uperf_results
 #
 # $pdir can either be empty or <directory>
-${curdir}/test_tools/save_results --curdir $curdir --home_root $to_home_root --copy_dir "${pdir} ${uperf_results}" --test_name ${test_name} --tuned_setting=$to_tuned_setting --version None --user $to_user
+${TOOLS_BIN}/save_results --curdir $curdir --home_root $to_home_root --copy_dir "${pdir} ${uperf_results}" --test_name ${test_name} --tuned_setting=$to_tuned_setting --version None --user $to_user
 #
 # We need to use the -x option so we only kill off uperf and not
 # uperf_run also.
