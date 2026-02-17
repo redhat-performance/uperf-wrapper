@@ -15,6 +15,7 @@
             "gcc",
             "lksctp-tools-devel",
             "bc",
+            "net-tools",
             "zip",
             "unzip",
             "git"
