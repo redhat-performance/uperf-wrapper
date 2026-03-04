@@ -1,0 +1,11 @@
+import pydantic
+import datetime
+
+class Uperf_Results(pydantic.BaseModel):
+    number_procs: int = pydantic.Field(gt=0)
+    trans_sec: int = pydantic.Field(gt=0)
+    test: str
+    packet: str
+    packet_size: int = pydantic.Field(gt=0)
+    Start_Date: datetime.datetime
+    End_Date: datetime.datetime
