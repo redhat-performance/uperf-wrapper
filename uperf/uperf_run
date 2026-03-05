@@ -245,7 +245,7 @@ create_header()
 	y_title=$6
 	out_file=$7
 
-	echo number_procs,"${top_title}"_"${y_title}",test,packet,packet_size,Start_Date,End_Date >> $out_file
+	echo instances,"${top_title}"_"${y_title}",test,packet_type,packet_size,Start_Date,End_Date >> $out_file
 }
 
 record_data()
@@ -293,7 +293,7 @@ record_data()
 	# we will lose the prior metadata header as well as prior test information written
 	# to it.
 	#
-	echo "number_procs,Gb_Sec,trans_sec,lat_usec,test_type,packet_type,packet_size,Start_Date,End_Date" >> $working_dir/results_uperf.csv
+	echo "instances,Gb_Sec,trans_sec,lat_usec,test_type,packet_type,packet_size,Start_Date,End_Date" >> $working_dir/results_uperf.csv
 	#
 	# Now populate the files
 	#
