@@ -25,6 +25,8 @@ arguments="$@"
 pdir=""
 test_iteration=0
 
+script_dir=$(realpath $(dirname $0))
+rtc=0
 if [ ! -f "uperf.out" ]; then
         command="${0} ${@}"
         echo $command
@@ -63,7 +65,7 @@ ssh_and_check_error()
 {
 	ssh -oStrictHostKeyChecking=no root@$1 "$2"
 	if [ $? -ne 0 ]; then
-		error_out "Failed: ssh -oStrictHostKeyChecking=no root@$1 $2" 1
+		error_out "Failed: ssh -oStrictHostKeyChecking=no root@$1 $2" $E_GENERAL
 	fi
 }
 
@@ -194,21 +196,31 @@ if [ ! -d "test_tools" ]; then
 	#
 	git clone $tools_git test_tools
 	if [ $? -ne 0 ]; then
-		error_out "pulling git $tools_git failed." 1
+		error_out "pulling git $tools_git failed." $E_GENERAL
 	fi
 fi
 
-${curdir}/test_tools/gather_data ${curdir}
-source test_tools/general_setup "$@"
+TOOLS_BIN="${HOME}/test_tools"
+export TOOLS_BIN
+if [ ! -d "${TOOLS_BIN}" ]; then
+	git clone $tools_git ${TOOLS_BIN}
+	if [ $? -ne 0 ]; then
+		echo pulling git $tools_git failed.
+		exit 101
+	fi
+fi
+source ${TOOLS_BIN}/error_codes
+${TOOLS_BIN}/gather_data ${curdir}
+source ${TOOLS_BIN}/general_setup "$@"
 source $TOOLS_BIN/helpers.inc
 
 #
 # Install packages
 #
-${TOOLS_BIN}/package_tool --wrapper_config ${run_dir}/uperf.json --no_packages $to_no_pkg_install
+package_tool --wrapper_config ${run_dir}/uperf.json --no_packages $to_no_pkg_install
 if [[ $? -ne 0 ]]; then
 	echo Package installation using ${TOOLS_BIN}/package_tool was unsuccessful.
-	exit 1
+	exit $E_PACKAGE_TOOL_PACKAGING
 fi
 
 #
@@ -233,11 +245,7 @@ create_header()
 	y_title=$6
 	out_file=$7
 
-	echo "test_type: $test_type"
-	echo "packet_type: $packet_type"
-	echo "packet_size: $packet_size"
-#	create_header $1 $2 $3 $4 Latency usec latency.csv
-	echo number_procs,"${top_title}"_"${y_title}",test,packet,packet_size,Start_Date,End_Date >> $out_file
+	echo instances,"${top_title}"_"${y_title}",test,packet_type,packet_size,Start_Date,End_Date >> $out_file
 }
 
 record_data()
@@ -247,7 +255,6 @@ record_data()
 		results=`grep ^Total $file`
 		start_time=`grep ^Start_time $file | awk '{print $2}'`
 		end_time=`grep ^End_time  $file | awk '{print $2}'`
-		echo $file
 		protocol=`echo $file | cut -d'_' -f3 | cut -d'=' -f 2`
 		op_type=`echo $file | cut -d'_' -f5 | cut -d'=' -f 2`
 		packet_size=`echo $file | cut -d'_' -f6 | cut -d'=' -f 2`
@@ -278,18 +285,15 @@ record_data()
 	# latency, trans/sec and Gb/sec.  Note we do not filter out the
 	# graphs, that is left for the user to d.
 	#
-	create_header $1 $2 $3 $4 Latency usec latency.csv
-#	echo number_procs,usec,Start_Date,End_Date >> latency.csv
-	create_header $1 $2 $3 $4 Transaction/second trans_sec pps.csv
-#	echo number_procs,trans_sec,Start_Date,End_Date >> pps.csv
+	create_header $1 $2 $3 $4 Latency usec lat.csv
+	create_header $1 $2 $3 $4 trans sec  pps.csv
 	create_header $1 $2 $3 $4 Bandwidth Gb_sec throughput.csv
-#	echo number_procs,Gb_Sec,Start_Date,End_Date >> throughput.csv
 	#
 	# We want to append to the file, not overwrite it.  If we over write the file,
 	# we will lose the prior metadata header as well as prior test information written
 	# to it.
 	#
-	echo "number_procs,Gb_Sec,trans_sec,lat_usec,test_type,packet_type,packet_size,Start_Date,End_Date" >> $working_dir/results_uperf.csv
+	echo "instances,Gb_Sec,trans_sec,lat_usec,test_type,packet_type,packet_size,Start_Date,End_Date" >> $working_dir/results_uperf.csv
 	#
 	# Now populate the files
 	#
@@ -304,19 +308,39 @@ record_data()
 		end_time=`echo $line | cut -d, -f 10`
 		pps=`echo $line | cut -d, -f 4 | sed "s/op\/s//g"`
 		lat=`echo $line | cut -d, -f 5`
-		out_string=$(build_data_string  "${threads}" "${bw}" "${f6}" "${f7}' ${f8}" "${start_time}" "${end_time}")
+		out_string=$(build_data_string  "${threads}" "${bw}" "${f6}" "${f7}" "${f8}" "${start_time}" "${end_time}")
 		echo $out_string >> throughput.csv
-		out_string=$(build_data_string  "${threads}" "${pps}" "$rest}" "${start_time}" "${end_time}")
+		out_string=$(build_data_string  "${threads}" "${pps}" "${f6}" "${f7}" "${f8}" "${start_time}" "${end_time}")
 		echo $out_string >> pps.csv
-		out_string=$(build_data_string  "${threads}" "${lat}" "${rest}" "${start_time}" "${end_time}")
+		out_string=$(build_data_string  "${threads}" "${lat}" "${f6}" "${f7}" "${f8}" "${start_time}" "${end_time}")
 		echo $out_string >> lat.csv
 		out_string=$(build_data_string  "${threads}" "${bw}" "${pps}" "${lat}" "${f6}" "${f7}" "${f8}" "${start_time}" "${end_time}")
 		echo $out_string >> $working_dir/results_uperf.csv
 	done < "${work_file}.sorted"
-	cat $working_dir/results_uperf.csv
+	pwd
+	for i in `ls *csv`; do
+		schema=`echo $i | cut -d'.' -f1`
+		if [[ ! -f $script_dir/schemas/$schema ]]; then
+			echo $i $script_dir/schemas/$schema 
+			echo Warning: Did not find schema for $script_dir/schemas/$schema
+			continue
+		fi
+		cp $script_dir/schemas/$schema $script_dir/results_schema.py
+		${TOOLS_BIN}/csv_to_json $to_json_flags --csv_file ${i} --output_file results_uperf.json
+		lrtc=$?
+		if [[ $lrtc -ne 0 ]]; then
+			error_out "Failure in csv_to_json $to_json_flags --csv_file ${i} --output_file results_uperf.json $i" $lrtc
+                fi
+		${TOOLS_BIN}/verify_results $to_verify_flags --schema_file $script_dir/results_schema.py --class_name Uperf_Results --file results_uperf.json
+		lrtc=$?
+		if [[ $lrtc -ne 0 ]]; then
+			echo Failure in `pwd`/$i
+			rtc=$ltc
+		fi
+	done
 	echo "" >> throughput.csv
 	echo "" >> pps.csv
-	echo "" >> latency.csv
+	echo "" >> lat.csv
 	rm ${work_file}*
 }
 
@@ -438,21 +462,21 @@ install_uperf()
 	cd /$to_home_root/$to_user/workloads
 	git clone https://github.com/uperf/uperf.git uperf
 	if [ $? -ne 0 ]; then
-		error_out "Failed: git clone https://github.com/uperf/uperf.git uperf" 1
+		error_out "Failed: git clone https://github.com/uperf/uperf.git uperf" $E_GENERAL
 	fi
 	cd uperf
 	autoreconf -f -i
 	if [ $? -ne 0 ]; then
-		error_out "Failed: autoreconf -f -i" 1
+		error_out "Failed: autoreconf -f -i" $E_GENERAL
 	fi
 	./configure
 	if [ $? -ne 0 ]; then
-		error_out "Failed: ./configure" 1
+		error_out "Failed: ./configure" $E_GENERAL
 	fi
 	touch *
 	make install
 	if [ $? -ne 0 ]; then
-		error_out "Failed: make install" 1
+		error_out "Failed: make install" $E_GENERAL
 	fi
 	cd
 }
@@ -518,7 +542,7 @@ execute_test()
 		fi
 		build_xml "${njobs}" "${packet_type}" "${packet_size}" "${nets}" "${net_count}" "${network_count}" "1" "${test_case}" "${test_iteration}"
 		if [ $? -ne 0 ]; then
-			error_out "Failed: build_xml" 1
+			error_out "Failed: build_xml" $E_GENERAL
 		fi
 		echo "# Time period: $timestamp" > $results_file_worker
 		echo "/usr/local/bin/uperf -m xml${net_count} >> $results_file_worker"
@@ -560,9 +584,6 @@ execute_test()
 	cat "${results_file}"*  >> ${uperf_results}/summary_${results_file}_${results_suffix}
 	if [[ $to_use_pcp -eq 1 ]]; then
 		report_pcp_values ${uperf_results}/summary_${results_file}_${results_suffix}
-#		echo "Send result to PCP archive"
-#		out="network_iter_${test_iters}"
-#		result2pcp iteration_${test_iteration} ${out}
 		stop_pcp_subset
 	fi
 	#
@@ -712,7 +733,7 @@ opts=$(getopt \
 )
 
 if [ $? -ne 0 ]; then
-	error_out "Parsing arguments failed" 1
+	error_out "Parsing arguments failed" $E_PARSE_ARGS
 fi
 
 eval set --$opts
@@ -855,11 +876,11 @@ fi
 pushd $uperf_results
 organize_data
 popd
-${curdir}/test_tools/move_data $curdir $uperf_results
+${TOOLS_BIN}/move_data $curdir $uperf_results
 cp ${curdir}/uperf.out $uperf_results
 #
 # $pdir can either be empty or <directory>
-${curdir}/test_tools/save_results --curdir $curdir --home_root $to_home_root --copy_dir "${pdir} ${uperf_results}" --test_name ${test_name} --tuned_setting=$to_tuned_setting --version None --user $to_user
+${TOOLS_BIN}/save_results --curdir $curdir --home_root $to_home_root --copy_dir "${pdir} ${uperf_results}" --test_name ${test_name} --tuned_setting=$to_tuned_setting --version None --user $to_user
 #
 # We need to use the -x option so we only kill off uperf and not
 # uperf_run also.
