@@ -238,7 +238,7 @@ source $TOOLS_BIN/helpers.inc
 #
 # Install packages
 #
-package_tool --wrapper_config ${run_dir}/uperf.json --no_packages $to_no_pkg_install
+package_tool --wrapper_config ${run_dir}/uperf.json
 if [[ $? -ne 0 ]]; then
 	echo Package installation using ${TOOLS_BIN}/package_tool was unsuccessful.
 	exit $E_PACKAGE_TOOL_PACKAGING
@@ -689,7 +689,7 @@ client_package_install()
 	fi
 	scp -oStrictHostKeyChecking=no test_tools.tar root@$lc_client:${to_home_root}/${to_user}/test_tools.tar
 	scp -oStrictHostKeyChecking=no  ${run_dir}/uperf.json  root@$lc_client:${to_home_root}/${to_user}/uperf.json
-	ssh_and_check_error $lc_client "cd ${to_home_root}/${to_user}; tar xf test_tools.tar;${tools_dir}/package_tool --wrapper_config uperf.json --no_packages $to_no_pkg_install"
+	ssh_and_check_error $lc_client "cd ${to_home_root}/${to_user}; tar xf test_tools.tar;${tools_dir}/package_tool --wrapper_config uperf.json ${to_pkg_tool_flags}"
 	popd > /dev/null
 }
 
