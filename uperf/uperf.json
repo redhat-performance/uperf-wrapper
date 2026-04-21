@@ -12,6 +12,8 @@
             "unzip"
         ],
         "rhel": [
+            "autoconf",
+            "automake",
             "gcc",
             "lksctp-tools-devel",
             "bc",
