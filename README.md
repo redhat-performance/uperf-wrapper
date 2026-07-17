@@ -187,8 +187,8 @@ uperf reports three key metrics:
 
 ### Protocol Support
 
-- **TCP**: Reliable, connection-oriented protocol. Default for most network performance testing.
-- **UDP**: Unreliable, connectionless protocol. Useful for measuring raw throughput without TCP overhead.
+- **TCP**: Default for most network performance testing.
+- **UDP**: Useful for measuring raw throughput without TCP overhead.
 
 ## Output Files
 
@@ -411,10 +411,7 @@ A non-zero return code from `verify_results` indicates that the output data did 
 - Run multiple iterations to verify consistency.
 
 ### Throughput Normalization
-The wrapper normalizes all throughput values to Gb/s:
-- Values reported in Mb/s are divided by 1024.
-- Values reported in Kb/s are divided by 1048576.
-- This ensures consistent units across all result files regardless of the raw uperf output format.
+The wrapper normalizes all throughput values to Gb/s for consistent units across all result files.
 
 ### Troubleshooting
 - If SSH connections fail, verify passwordless SSH is configured for root on all client and server hosts.
