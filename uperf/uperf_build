@@ -17,7 +17,7 @@ install_uperf()
 
 cat /proc/version | grep "Red Hat" > /dev/null
 if [ $? -eq 0 ]; then
-	major=$(uname -r | sed 's/^.*\.el//' | cut -d'_' -f1)
+	major=$(uname -r | grep -oP '.el\K[0-9]+')
 	dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-${major}.noarch.rpm
 fi
 if [ -f "/bin/uperf" ]; then
